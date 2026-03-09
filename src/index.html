@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BestText</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app compact-app">
+      <header class="topbar topbar-compact">
+        <div>
+          <h1>BestText</h1>
+          <p>Write clearly in English from any app.</p>
+        </div>
+        <div class="actions compact-header-actions">
+          <button id="open-widget-btn" class="secondary" type="button">Widget</button>
+          <button id="open-settings-btn" class="secondary" type="button">Settings</button>
+        </div>
+      </header>
+
+      <section id="onboarding-panel" class="panel onboarding" hidden>
+        <h2>First-run setup</h2>
+        <p class="hint">Grant permissions once so dictation and auto-insert work reliably.</p>
+
+        <div class="onboarding-steps">
+          <div class="onboarding-step">
+            <h3>1) Microphone access</h3>
+            <p class="hint">Required for audio transcription.</p>
+            <div class="actions">
+              <button id="onboarding-mic-btn" type="button">Allow microphone</button>
+              <button id="onboarding-mic-settings-btn" type="button" class="secondary">Open system settings</button>
+            </div>
+            <p id="onboarding-mic-status" class="hint">Not checked yet.</p>
+          </div>
+
+          <div id="onboarding-accessibility-step" class="onboarding-step" hidden>
+            <h3>2) Accessibility (macOS)</h3>
+            <p class="hint">Required for automatic paste (Cmd+V simulation).</p>
+            <div class="actions">
+              <button id="onboarding-accessibility-btn" type="button">Test accessibility access</button>
+              <button id="onboarding-accessibility-settings-btn" type="button" class="secondary">Open system settings</button>
+            </div>
+            <p id="onboarding-accessibility-status" class="hint">Not checked yet.</p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="onboarding-finish-btn" type="button">Finish setup</button>
+          <button id="onboarding-skip-btn" type="button" class="secondary">Skip for now</button>
+        </div>
+      </section>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab is-active" data-tab="improve" role="tab" aria-selected="true">Improve</button>
+        <button class="tab" data-tab="translate" role="tab" aria-selected="false">Translate</button>
+      </nav>
+
+      <section class="panel is-active" data-panel="improve">
+        <label for="improve-input">English text</label>
+        <textarea id="improve-input" rows="6" placeholder="Paste or type your message in English..."></textarea>
+
+        <div class="row">
+          <label for="improve-style">Style</label>
+          <select id="improve-style">
+            <option value="simple">Simple</option>
+            <option value="professional">Professional</option>
+            <option value="friendly">Friendly</option>
+            <option value="casual">Casual</option>
+            <option value="formal">Formal</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button id="improve-btn">Improve text</button>
+          <button id="insert-improve-btn">Insert in cursor</button>
+          <button id="copy-improve-btn" class="secondary">Copy output</button>
+        </div>
+
+        <label for="improve-output">Output</label>
+        <textarea id="improve-output" rows="6" placeholder="Improved text will appear here..."></textarea>
+      </section>
+
+      <section class="panel" data-panel="translate">
+        <div class="actions">
+          <button id="record-audio-btn" type="button" class="audio-control">
+            <span class="btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path
+                  d="M12 15.5a4 4 0 0 0 4-4v-5a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4zm7-4a1 1 0 1 0-2 0 5 5 0 1 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21H9.5a1 1 0 1 0 0 2h5a1 1 0 1 0 0-2H13v-2.58A7 7 0 0 0 19 11.5z"
+                />
+              </svg>
+            </span>
+            <span>Record (Spanish)</span>
+          </button>
+          <button id="stop-audio-btn" type="button" class="secondary audio-control" disabled>
+            <span class="btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M7 7h10v10H7z" />
+              </svg>
+            </span>
+            <span>Stop & transcribe</span>
+          </button>
+        </div>
+        <div id="recording-visualizer" class="recording-visualizer" hidden>
+          <span class="recording-pill">
+            <span class="recording-dot" aria-hidden="true"></span>
+            <span>Recording</span>
+          </span>
+          <div id="recording-waveform" class="recording-waveform" aria-hidden="true"></div>
+        </div>
+        <p id="recording-state" class="hint">Microphone idle.</p>
+
+        <label for="translate-input">Spanish text</label>
+        <textarea id="translate-input" rows="6" placeholder="Write in Spanish (or paste transcript)..."></textarea>
+
+        <div class="row">
+          <label for="translate-style">Style</label>
+          <select id="translate-style">
+            <option value="simple">Simple</option>
+            <option value="professional">Professional</option>
+            <option value="friendly">Friendly</option>
+            <option value="casual">Casual</option>
+            <option value="formal">Formal</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button id="translate-btn">Translate to English</button>
+          <button id="insert-translate-btn">Insert in cursor</button>
+          <button id="copy-translate-btn" class="secondary">Copy output</button>
+        </div>
+
+        <label for="translate-output">Output</label>
+        <textarea id="translate-output" rows="6" placeholder="English text will appear here..."></textarea>
+      </section>
+
+      <footer id="status" class="status">Ready</footer>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

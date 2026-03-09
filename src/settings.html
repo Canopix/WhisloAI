@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BestText Settings</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="settings-body">
+    <main class="settings-shell">
+      <header class="settings-hero">
+        <h1>Settings</h1>
+        <p>Configure your provider once, test it instantly, and keep shortcuts under control.</p>
+      </header>
+
+      <div id="status" class="settings-status" data-tone="neutral">Ready.</div>
+
+      <div class="settings-layout">
+        <aside class="settings-nav">
+          <button type="button" class="settings-nav-btn is-active" data-view="providers">Providers</button>
+          <button type="button" class="settings-nav-btn" data-view="hotkeys">Hotkeys</button>
+          <button type="button" class="settings-nav-btn" data-view="prompts">Prompts & Modes</button>
+        </aside>
+
+        <section class="settings-content">
+          <section class="settings-view is-active" data-view="providers">
+            <div class="settings-grid">
+              <aside class="settings-panel providers-panel">
+                <div class="providers-header">
+                  <h2>Saved Providers</h2>
+                  <button type="button" id="new-provider-btn" class="settings-btn-secondary">New provider</button>
+                </div>
+                <p id="providers-summary" class="providers-summary">Loading providers...</p>
+                <ul id="providers-list" class="providers-cards"></ul>
+              </aside>
+
+              <form id="provider-form" class="settings-card">
+                <h2>Provider Details</h2>
+                <p class="hint">Test first. Save only when the connection is valid.</p>
+                <input id="provider-id" type="hidden" />
+
+                <div class="settings-form-grid">
+                  <div class="field">
+                    <label for="provider-name">Name</label>
+                    <input id="provider-name" type="text" placeholder="OpenAI" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-type">Type</label>
+                    <select id="provider-type">
+                      <option value="openai">OpenAI</option>
+                      <option value="openai-compatible">OpenAI-compatible</option>
+                    </select>
+                  </div>
+
+                  <div class="field field-full">
+                    <label for="provider-base-url">Base URL</label>
+                    <input id="provider-base-url" type="url" placeholder="https://api.openai.com/v1" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-improve-model">Improve model</label>
+                    <input id="provider-improve-model" type="text" placeholder="gpt-4.1-mini" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-translate-model">Translate model</label>
+                    <input id="provider-translate-model" type="text" placeholder="gpt-4.1-mini" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-transcribe-model">Transcribe model</label>
+                    <input
+                      id="provider-transcribe-model"
+                      type="text"
+                      placeholder="gpt-4o-mini-transcribe"
+                      required
+                    />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-api-key">API key</label>
+                    <input id="provider-api-key" type="password" placeholder="sk-..." autocomplete="off" />
+                    <small class="field-hint">
+                      Stored locally. Leave unchanged to keep the current key.
+                    </small>
+                  </div>
+                </div>
+
+                <div class="settings-actions">
+                  <button type="button" id="delete-provider-btn" class="settings-btn-danger">Delete provider</button>
+                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary">Set active</button>
+                  <button type="button" id="test-provider-btn" class="settings-btn-secondary">
+                    Test connection (no save)
+                  </button>
+                  <button type="submit" class="settings-btn-primary">Save provider</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <section class="settings-view" data-view="hotkeys">
+            <form id="hotkeys-form" class="settings-card">
+              <h2>Global Hotkeys</h2>
+              <p class="hint">Format: <code>CommandOrControl+Shift+Space</code></p>
+
+              <div class="settings-form-grid">
+                <div class="field">
+                  <label for="hotkey-open-app">Open quick panel</label>
+                  <input
+                    id="hotkey-open-app"
+                    type="text"
+                    placeholder="CommandOrControl+Shift+Space"
+                    autocomplete="off"
+                    required
+                  />
+                </div>
+
+                <div class="field">
+                  <label for="hotkey-open-improve">Improve selected text</label>
+                  <input
+                    id="hotkey-open-improve"
+                    type="text"
+                    placeholder="CommandOrControl+Shift+I"
+                    autocomplete="off"
+                    required
+                  />
+                </div>
+
+                <div class="field field-full">
+                  <label for="hotkey-open-dictate">Start dictation + translation</label>
+                  <input
+                    id="hotkey-open-dictate"
+                    type="text"
+                    placeholder="CommandOrControl+Shift+D"
+                    autocomplete="off"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="settings-actions">
+                <button type="button" id="reset-hotkeys-btn" class="settings-btn-secondary">Reset defaults</button>
+                <button type="submit" class="settings-btn-primary">Save hotkeys</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="settings-view" data-view="prompts">
+            <form id="prompt-form" class="settings-card">
+              <h2>Prompts & Modes</h2>
+              <p class="hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>
+
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="prompt-improve-system">Improve system prompt</label>
+                  <textarea
+                    id="prompt-improve-system"
+                    rows="3"
+                    placeholder="You are a writing assistant..."
+                    required
+                  ></textarea>
+                </div>
+
+                <div class="field field-full">
+                  <label for="prompt-translate-system">Translate system prompt</label>
+                  <textarea
+                    id="prompt-translate-system"
+                    rows="3"
+                    placeholder="You are a translation assistant..."
+                    required
+                  ></textarea>
+                </div>
+              </div>
+
+              <h3 class="settings-subtitle">Mode instructions</h3>
+
+              <div class="settings-form-grid">
+                <div class="field">
+                  <label for="mode-simple">Simple</label>
+                  <input id="mode-simple" type="text" required />
+                </div>
+
+                <div class="field">
+                  <label for="mode-professional">Professional</label>
+                  <input id="mode-professional" type="text" required />
+                </div>
+
+                <div class="field">
+                  <label for="mode-friendly">Friendly</label>
+                  <input id="mode-friendly" type="text" required />
+                </div>
+
+                <div class="field">
+                  <label for="mode-casual">Casual</label>
+                  <input id="mode-casual" type="text" required />
+                </div>
+
+                <div class="field">
+                  <label for="mode-formal">Formal</label>
+                  <input id="mode-formal" type="text" required />
+                </div>
+
+                <div class="field">
+                  <label for="quick-default-mode">Quick widget default mode</label>
+                  <select id="quick-default-mode">
+                    <option value="simple">Simple</option>
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="casual">Casual</option>
+                    <option value="formal">Formal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="settings-actions">
+                <button type="button" id="reset-prompt-btn" class="settings-btn-secondary">Reset defaults</button>
+                <button type="submit" class="settings-btn-primary">Save prompts & modes</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <script src="./settings.js"></script>
+  </body>
+</html>
