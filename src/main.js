@@ -52,10 +52,13 @@ let recordingBars = [];
 const RECORDING_WAVE_BARS = 24;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
 
+function formatError(error) {
+  return typeof specErrorFor === "function" ? specErrorFor(error) : String(error || "").replace(/^Error: /, "");
+}
+
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
-  statusEl.style.borderColor = isError ? "#dc2626" : "#dbe2ea";
-  statusEl.style.color = isError ? "#b91c1c" : "#1f2a37";
+  statusEl.dataset.tone = isError ? "error" : "neutral";
 }
 
 function normalizeMode(mode) {
@@ -210,22 +213,17 @@ function setOnboardingStatusMessage(target, message, isError = false) {
 function setOnboardingVisible(visible) {
   onboardingPanel.hidden = !visible;
 
-  const tabsNav = document.querySelector(".tabs");
-  const regularPanels = Array.from(document.querySelectorAll(".panel")).filter(
-    (panel) => panel !== onboardingPanel,
-  );
-
-  tabsNav.hidden = visible;
-  regularPanels.forEach((panel) => {
-    panel.hidden = visible;
-  });
+  const mainContent = document.getElementById("main-content");
+  if (mainContent) {
+    mainContent.hidden = visible;
+  }
 }
 
 async function openPermissionSettings(permission) {
   try {
     await invoke("open_permission_settings", { permission });
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   }
 }
 
@@ -252,7 +250,7 @@ async function requestOnboardingMicrophonePermission() {
       "Microphone access denied. Open system settings and allow access.",
       true,
     );
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   } finally {
     onboardingMicBtn.disabled = false;
   }
@@ -271,7 +269,7 @@ async function testOnboardingAccessibilityPermission() {
       "Accessibility access missing. Open system settings and allow BestText.",
       true,
     );
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   } finally {
     onboardingAccessibilityBtn.disabled = false;
   }
@@ -283,7 +281,7 @@ async function finishOnboarding() {
     setOnboardingVisible(false);
     setStatus("Setup completed.");
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   }
 }
 
@@ -387,8 +385,9 @@ async function transcribeRecordedBlob(blob) {
     setRecordingState("Transcription ready. You can edit and translate.");
     setStatus("Audio transcribed.");
   } catch (error) {
-    setRecordingState("Transcription failed. Try again.", true);
-    setStatus(String(error), true);
+    const msg = formatError(error);
+    setRecordingState(msg, true);
+    setStatus(msg, true);
   } finally {
     isTranscribingAudio = false;
     setRecordingButtons(false);
@@ -401,14 +400,16 @@ async function startAudioRecording() {
   }
 
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-    setRecordingState("Microphone is not available in this environment.", true);
-    setStatus("Microphone is not available.", true);
+    const msg = formatError("Microphone is not available");
+    setRecordingState(msg, true);
+    setStatus(msg, true);
     return;
   }
 
   if (typeof MediaRecorder === "undefined") {
-    setRecordingState("MediaRecorder is not supported on this OS/browser runtime.", true);
-    setStatus("Audio recording is not supported.", true);
+    const msg = formatError("MediaRecorder not supported");
+    setRecordingState(msg, true);
+    setStatus(msg, true);
     return;
   }
 
@@ -444,8 +445,9 @@ async function startAudioRecording() {
     mediaRecorder = null;
     releaseMediaStream();
     setRecordingButtons(false);
-    setRecordingState("Could not access microphone. Check OS permissions.", true);
-    setStatus(String(error), true);
+    const msg = formatError(error);
+    setRecordingState(msg, true);
+    setStatus(msg, true);
   }
 }
 
@@ -477,7 +479,7 @@ async function handleImprove() {
     improveOutput.value = output;
     setStatus("Text improved.");
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   } finally {
     improveBtn.disabled = false;
   }
@@ -500,7 +502,7 @@ async function handleTranslate() {
     translateOutput.value = output;
     setStatus("Text translated.");
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   } finally {
     translateBtn.disabled = false;
   }
@@ -546,7 +548,7 @@ async function openSettingsWindow() {
   try {
     await invoke("open_settings_window");
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   }
 }
 
@@ -554,13 +556,43 @@ async function openWidgetWindow() {
   try {
     await invoke("open_widget_window");
   } catch (error) {
-    setStatus(String(error), true);
+    setStatus(formatError(error), true);
   }
 }
 
 tabs.forEach((tab) => {
   tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 });
+
+const tablist = document.querySelector(".tabs");
+if (tablist) {
+  tablist.addEventListener("keydown", (e) => {
+    const tabEls = Array.from(tablist.querySelectorAll('[role="tab"]'));
+    const idx = tabEls.indexOf(e.target);
+    if (idx === -1) return;
+    let nextIdx = idx;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      nextIdx = idx <= 0 ? tabEls.length - 1 : idx - 1;
+    } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      nextIdx = idx >= tabEls.length - 1 ? 0 : idx + 1;
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      nextIdx = 0;
+    } else if (e.key === "End") {
+      e.preventDefault();
+      nextIdx = tabEls.length - 1;
+    } else {
+      return;
+    }
+    const nextTab = tabEls[nextIdx];
+    if (nextTab) {
+      nextTab.focus();
+      switchTab(nextTab.dataset.tab);
+    }
+  });
+}
 
 openSettingsBtn.addEventListener("click", openSettingsWindow);
 openWidgetBtn.addEventListener("click", openWidgetWindow);
@@ -639,7 +671,7 @@ async function bootstrap() {
     applyOnboardingStatus(onboardingStatus);
     setStatus("Ready.");
   } catch (error) {
-    setStatus(`Failed to bootstrap: ${String(error)}`, true);
+    setStatus(`Error al iniciar: ${formatError(error)}`, true);
   }
 }
 

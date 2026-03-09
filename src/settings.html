@@ -13,16 +13,16 @@
         <p>Configure your provider once, test it instantly.</p>
       </header>
 
-      <div id="status" class="settings-status" data-tone="neutral">Ready.</div>
+      <div id="status" class="settings-status" data-tone="neutral" aria-live="polite" aria-atomic="true">Ready.</div>
 
       <div class="settings-layout">
-        <aside class="settings-nav">
-          <button type="button" class="settings-nav-btn is-active" data-view="providers">Providers</button>
-          <button type="button" class="settings-nav-btn" data-view="prompts">Prompts & Modes</button>
+        <aside class="settings-nav" role="tablist" aria-label="Settings sections">
+          <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers">Providers</button>
+          <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts">Prompts & Modes</button>
         </aside>
 
         <section class="settings-content">
-          <section class="settings-view is-active" data-view="providers">
+          <section id="view-providers" class="settings-view is-active" data-view="providers" role="tabpanel" aria-labelledby="nav-providers">
             <div class="settings-grid">
               <aside class="settings-panel providers-panel">
                 <div class="providers-header">
@@ -98,7 +98,7 @@
             </div>
           </section>
 
-          <section class="settings-view" data-view="prompts">
+          <section id="view-prompts" class="settings-view" data-view="prompts" role="tabpanel" aria-labelledby="nav-prompts">
             <form id="prompt-form" class="settings-card">
               <h2>Prompts & Modes</h2>
               <p class="hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>

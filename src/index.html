@@ -51,12 +51,13 @@
         </div>
       </section>
 
-      <nav class="tabs" role="tablist">
-        <button class="tab is-active" data-tab="improve" role="tab" aria-selected="true">Improve</button>
-        <button class="tab" data-tab="translate" role="tab" aria-selected="false">Translate</button>
+      <div id="main-content">
+      <nav class="tabs" role="tablist" aria-label="Main actions">
+        <button id="tab-improve" class="tab is-active" data-tab="improve" role="tab" aria-selected="true" aria-controls="panel-improve">Improve</button>
+        <button id="tab-translate" class="tab" data-tab="translate" role="tab" aria-selected="false" aria-controls="panel-translate">Translate</button>
       </nav>
 
-      <section class="panel is-active" data-panel="improve">
+      <section id="panel-improve" class="panel is-active" data-panel="improve" role="tabpanel" aria-labelledby="tab-improve">
         <label for="improve-input">English text</label>
         <textarea id="improve-input" rows="6" placeholder="Paste or type your message in English..."></textarea>
 
@@ -81,7 +82,7 @@
         <textarea id="improve-output" rows="6" placeholder="Improved text will appear here..."></textarea>
       </section>
 
-      <section class="panel" data-panel="translate">
+      <section id="panel-translate" class="panel" data-panel="translate" role="tabpanel" aria-labelledby="tab-translate">
         <div class="actions">
           <button id="record-audio-btn" type="button" class="audio-control">
             <span class="btn-icon" aria-hidden="true">
@@ -135,9 +136,11 @@
         <textarea id="translate-output" rows="6" placeholder="English text will appear here..."></textarea>
       </section>
 
-      <footer id="status" class="status">Ready</footer>
+      <footer id="status" class="status" data-tone="neutral" aria-live="polite" aria-atomic="true">Ready</footer>
+      </div>
     </main>
 
+    <script src="./errors.js"></script>
     <script src="./main.js"></script>
   </body>
 </html>

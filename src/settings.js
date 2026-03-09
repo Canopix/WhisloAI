@@ -439,6 +439,32 @@ if (settingsNav) {
       activateView(btn.dataset.view);
     }
   });
+  settingsNav.addEventListener("keydown", (e) => {
+    const tabEls = Array.from(settingsNav.querySelectorAll('[role="tab"]'));
+    const idx = tabEls.indexOf(e.target);
+    if (idx === -1) return;
+    let nextIdx = idx;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      nextIdx = idx <= 0 ? tabEls.length - 1 : idx - 1;
+    } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      nextIdx = idx >= tabEls.length - 1 ? 0 : idx + 1;
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      nextIdx = 0;
+    } else if (e.key === "End") {
+      e.preventDefault();
+      nextIdx = tabEls.length - 1;
+    } else {
+      return;
+    }
+    const nextTab = tabEls[nextIdx];
+    if (nextTab) {
+      nextTab.focus();
+      activateView(nextTab.dataset.view);
+    }
+  });
 }
 window.addEventListener("hashchange", () => activateView(currentHashView(), false));
 

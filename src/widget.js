@@ -28,12 +28,8 @@ let quickMode = "simple";
 const QUICK_WAVE_BAR_COUNT = 20;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
 
-function normalizeError(error) {
-  const text = String(error || "Unknown error.");
-  if (text.startsWith("Error: ")) {
-    return text.slice(7);
-  }
-  return text;
+function formatError(error) {
+  return typeof specErrorFor === "function" ? specErrorFor(error) : String(error || "").replace(/^Error: /, "");
 }
 
 function normalizeMode(mode) {
@@ -85,7 +81,7 @@ function setStatus(message, state = "neutral") {
   statusEl.textContent = message;
   statusEl.dataset.state = state;
 
-  const visible = state === "error" || state === "warning";
+  const visible = state === "loading" || state === "success" || state === "error" || state === "warning";
   statusEl.hidden = !visible;
   syncQuickWindowLayout();
 }
@@ -246,7 +242,7 @@ async function insertResultText(output) {
     } catch (_) {
       // ignore
     }
-    setStatus(`Copied. Paste manually with ${pasteHint()}.`, "warning");
+    setStatus(`No pudimos pegar automáticamente. El texto quedó copiado. Pegá con ${pasteHint()}.`, "warning");
   }
 }
 
@@ -262,7 +258,7 @@ async function runSelectionAction(mode) {
   try {
     const input = await invoke("capture_selected_text");
     if (!input || !String(input).trim()) {
-      throw new Error("No selected text detected.");
+      throw new Error("No selected text detected");
     }
 
     setStatus(mode === "improve" ? "Improving selected text..." : "Translating selected text...", "loading");
@@ -279,7 +275,7 @@ async function runSelectionAction(mode) {
     } catch (_) {
       // ignore
     }
-    setStatus(normalizeError(error), "error");
+    setStatus(formatError(error), "error");
   } finally {
     setBusy(false);
     updateDictateButton();
@@ -303,7 +299,7 @@ async function startDictation() {
     isRecording = true;
     setBusy(false);
     updateDictateButton();
-    setStatus("Recording...", "neutral");
+    setStatus("Recording...", "loading");
 
     mediaRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
@@ -312,7 +308,7 @@ async function startDictation() {
     };
 
     mediaRecorder.onerror = () => {
-      setStatus("Recording failed. Check microphone permissions.", "error");
+      setStatus(formatError("Recording failed"), "error");
     };
 
     mediaRecorder.onstop = async () => {
@@ -324,7 +320,7 @@ async function startDictation() {
       updateDictateButton();
 
       if (!blob.size) {
-        setStatus("No audio captured. Try again.", "error");
+        setStatus(formatError("No audio captured"), "error");
         return;
       }
 
@@ -348,7 +344,7 @@ async function startDictation() {
         await insertResultText(output);
         setStatus("Ready.", "neutral");
       } catch (error) {
-        setStatus(normalizeError(error), "error");
+        setStatus(formatError(error), "error");
       } finally {
         setBusy(false);
         updateDictateButton();
@@ -361,7 +357,7 @@ async function startDictation() {
     updateDictateButton();
     stopAndReleaseStream();
     setBusy(false);
-    setStatus(normalizeError(error), "error");
+    setStatus(formatError(error), "error");
   }
 }
 
@@ -373,7 +369,7 @@ function stopDictation() {
     setStatus("Ready.", "neutral");
     return;
   }
-  setStatus("Stopping...", "loading");
+    setStatus("Stopping...", "loading");
   mediaRecorder.stop();
 }
 
@@ -385,7 +381,7 @@ async function openSettings() {
     await invoke("open_settings_window");
     await invoke("close_quick_window");
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(formatError(error), "error");
   }
 }
 
