@@ -24,12 +24,6 @@ const newProviderBtn = document.getElementById("new-provider-btn");
 const activateProviderBtn = document.getElementById("activate-provider-btn");
 const deleteProviderBtn = document.getElementById("delete-provider-btn");
 
-const hotkeysForm = document.getElementById("hotkeys-form");
-const hotkeyOpenApp = document.getElementById("hotkey-open-app");
-const hotkeyOpenImprove = document.getElementById("hotkey-open-improve");
-const hotkeyOpenDictate = document.getElementById("hotkey-open-dictate");
-const resetHotkeysBtn = document.getElementById("reset-hotkeys-btn");
-
 const promptForm = document.getElementById("prompt-form");
 const promptImproveSystem = document.getElementById("prompt-improve-system");
 const promptTranslateSystem = document.getElementById("prompt-translate-system");
@@ -40,12 +34,6 @@ const modeCasual = document.getElementById("mode-casual");
 const modeFormal = document.getElementById("mode-formal");
 const quickDefaultMode = document.getElementById("quick-default-mode");
 const resetPromptBtn = document.getElementById("reset-prompt-btn");
-
-const DEFAULT_HOTKEYS = {
-  openApp: "CommandOrControl+Shift+Space",
-  openImprove: "CommandOrControl+Shift+I",
-  openDictateTranslate: "CommandOrControl+Shift+D",
-};
 
 const DEFAULT_PROMPT_SETTINGS = {
   improveSystemPrompt:
@@ -115,7 +103,6 @@ function activateView(view, syncHash = true) {
   views.forEach((section) => {
     const isActive = section.dataset.view === nextView;
     section.classList.toggle("is-active", isActive);
-    section.hidden = !isActive;
   });
 
   if (syncHash) {
@@ -125,6 +112,10 @@ function activateView(view, syncHash = true) {
         window.history.replaceState(null, "", nextHash);
       } catch (_) {}
     }
+  }
+
+  if (nextView !== "providers") {
+    setStatus("Ready.", "neutral");
   }
 }
 
@@ -362,41 +353,6 @@ async function testProvider() {
   }
 }
 
-function fillHotkeysForm(hotkeys) {
-  hotkeyOpenApp.value = hotkeys.openApp || DEFAULT_HOTKEYS.openApp;
-  hotkeyOpenImprove.value = hotkeys.openImprove || DEFAULT_HOTKEYS.openImprove;
-  hotkeyOpenDictate.value = hotkeys.openDictateTranslate || DEFAULT_HOTKEYS.openDictateTranslate;
-}
-
-async function loadHotkeys() {
-  const hotkeys = await invoke("get_hotkeys");
-  fillHotkeysForm(hotkeys);
-}
-
-async function saveHotkeys(event) {
-  event.preventDefault();
-
-  const payload = {
-    openApp: hotkeyOpenApp.value.trim(),
-    openImprove: hotkeyOpenImprove.value.trim(),
-    openDictateTranslate: hotkeyOpenDictate.value.trim(),
-  };
-
-  if (!payload.openApp || !payload.openImprove || !payload.openDictateTranslate) {
-    setStatus("Complete all hotkey fields before saving.", "error");
-    return;
-  }
-
-  setStatus("Saving hotkeys...", "loading");
-  try {
-    const saved = await invoke("save_hotkeys", { hotkeys: payload });
-    fillHotkeysForm(saved);
-    setStatus("Hotkeys saved and applied.", "success");
-  } catch (error) {
-    setStatus(normalizeError(error), "error");
-  }
-}
-
 function fillPromptForm(settings) {
   const value = settings || DEFAULT_PROMPT_SETTINGS;
   const modeInstructions = value.modeInstructions || DEFAULT_PROMPT_SETTINGS.modeInstructions;
@@ -469,11 +425,6 @@ newProviderBtn.addEventListener("click", () => {
   activateView("providers");
   setStatus("New provider form ready.", "neutral");
 });
-hotkeysForm.addEventListener("submit", saveHotkeys);
-resetHotkeysBtn.addEventListener("click", () => {
-  fillHotkeysForm(DEFAULT_HOTKEYS);
-  setStatus("Hotkeys reset to defaults (not saved yet).", "neutral");
-});
 promptForm.addEventListener("submit", savePromptSettings);
 resetPromptBtn.addEventListener("click", () => {
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
@@ -495,12 +446,15 @@ async function bootstrap() {
   activateView(currentHashView(), false);
   resetProviderForm();
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
   if (!invoke) {
     setStatus("App not ready. View switching works.", "error");
     return;
   }
   try {
-    await Promise.all([loadHotkeys(), loadProviders(), loadPromptSettings()]);
+    await Promise.all([loadProviders(), loadPromptSettings()]);
     setStatus("Ready.", "neutral");
   } catch (error) {
     setStatus(`Failed to load settings: ${normalizeError(error)}`, "error");

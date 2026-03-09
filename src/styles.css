@@ -55,33 +55,32 @@ body {
 
 .settings-shell {
   max-width: 1200px;
-  min-height: 100vh;
   margin: 0 auto;
   padding: 20px;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto;
   align-content: start;
   gap: 14px;
 }
 
 .settings-hero {
   border: 1px solid #c9ddd4;
-  border-radius: 18px;
-  padding: 16px 18px;
+  border-radius: 14px;
+  padding: 10px 14px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(245, 255, 251, 0.94) 100%);
-  box-shadow: 0 12px 24px rgba(19, 48, 44, 0.06);
+  box-shadow: 0 8px 16px rgba(19, 48, 44, 0.05);
 }
 
 .settings-hero h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: 0.2px;
 }
 
 .settings-hero p {
-  margin: 8px 0 0;
-  font-size: 14px;
+  margin: 4px 0 0;
+  font-size: 13px;
   color: #4f5f63;
 }
 
@@ -317,6 +316,18 @@ body {
   color: #334649;
 }
 
+.settings-label-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-label-with-icon .icon-lucide {
+  width: 16px;
+  height: 16px;
+  color: #0f766e;
+}
+
 .field-hint {
   margin-top: 6px;
   font-size: 11px;
@@ -404,10 +415,10 @@ body {
 
 .settings-status {
   border: 1px solid #ccddd7;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.94);
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: 6px 12px;
+  font-size: 12px;
   color: #274044;
   position: sticky;
   top: 12px;

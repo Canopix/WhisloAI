@@ -10,7 +10,7 @@
     <main class="settings-shell">
       <header class="settings-hero">
         <h1>Settings</h1>
-        <p>Configure your provider once, test it instantly, and keep shortcuts under control.</p>
+        <p>Configure your provider once, test it instantly.</p>
       </header>
 
       <div id="status" class="settings-status" data-tone="neutral">Ready.</div>
@@ -18,7 +18,6 @@
       <div class="settings-layout">
         <aside class="settings-nav">
           <button type="button" class="settings-nav-btn is-active" data-view="providers">Providers</button>
-          <button type="button" class="settings-nav-btn" data-view="hotkeys">Hotkeys</button>
           <button type="button" class="settings-nav-btn" data-view="prompts">Prompts & Modes</button>
         </aside>
 
@@ -99,53 +98,6 @@
             </div>
           </section>
 
-          <section class="settings-view" data-view="hotkeys">
-            <form id="hotkeys-form" class="settings-card">
-              <h2>Global Hotkeys</h2>
-              <p class="hint">Format: <code>CommandOrControl+Shift+Space</code></p>
-
-              <div class="settings-form-grid">
-                <div class="field">
-                  <label for="hotkey-open-app">Open quick panel</label>
-                  <input
-                    id="hotkey-open-app"
-                    type="text"
-                    placeholder="CommandOrControl+Shift+Space"
-                    autocomplete="off"
-                    required
-                  />
-                </div>
-
-                <div class="field">
-                  <label for="hotkey-open-improve">Improve selected text</label>
-                  <input
-                    id="hotkey-open-improve"
-                    type="text"
-                    placeholder="CommandOrControl+Shift+I"
-                    autocomplete="off"
-                    required
-                  />
-                </div>
-
-                <div class="field field-full">
-                  <label for="hotkey-open-dictate">Start dictation + translation</label>
-                  <input
-                    id="hotkey-open-dictate"
-                    type="text"
-                    placeholder="CommandOrControl+Shift+D"
-                    autocomplete="off"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div class="settings-actions">
-                <button type="button" id="reset-hotkeys-btn" class="settings-btn-secondary">Reset defaults</button>
-                <button type="submit" class="settings-btn-primary">Save hotkeys</button>
-              </div>
-            </form>
-          </section>
-
           <section class="settings-view" data-view="prompts">
             <form id="prompt-form" class="settings-card">
               <h2>Prompts & Modes</h2>
@@ -223,6 +175,7 @@
       </div>
     </main>
 
+    <script src="./vendor/lucide.min.js"></script>
     <script src="./settings.js"></script>
   </body>
 </html>

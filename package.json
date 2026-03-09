@@ -5,7 +5,10 @@
   "description": "Minimal desktop writing helper built with Tauri",
   "scripts": {
     "build": "rm -rf dist && mkdir -p dist && cp -R src/* dist/",
+    "clean": "rm -rf dist out .next",
+    "rebuild": "npm run clean && npm run build && npm run tauri build",
     "dev": "tauri dev",
+    "run:prod": "npm run build && tauri build --bundles app && open src-tauri/target/release/bundle/macos/BestText.app",
     "tauri": "tauri"
   },
   "devDependencies": {
