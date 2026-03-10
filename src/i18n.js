@@ -1,17 +1,17 @@
-(function initBestTextI18n(globalScope) {
+(function initWhisloAII18n(globalScope) {
   const SUPPORTED_LANGUAGES = ["en", "es"];
   const DEFAULT_LANGUAGE = "en";
   const DEFAULT_PREFERENCE = "system";
 
   const dictionaries = {
     en: {
-      "app.name": "BestText",
+      "app.name": "WhisloAI",
       "modes.simple": "Simple",
       "modes.professional": "Professional",
       "modes.friendly": "Friendly",
       "modes.casual": "Casual",
       "modes.formal": "Formal",
-      "widget.title": "BestText Quick",
+      "widget.title": "WhisloAI Quick",
       "widget.toolbar.aria": "Quick actions",
       "widget.improve.aria": "Improve selected text using the selected writing mode",
       "widget.improve.title": "Improve selected text — Rewrite in the selected writing style",
@@ -29,7 +29,7 @@
       "widget.close.default.title": "Close widget (Escape)",
       "widget.close.discard.aria": "Discard recording",
       "widget.close.discard.title": "Discard recording",
-      "main.title": "BestText",
+      "main.title": "WhisloAI",
       "main.header.subtitle": "Write clearly in English from any app.",
       "main.action.widget": "Widget",
       "main.action.settings": "Settings",
@@ -76,7 +76,7 @@
       "main.status.microphone_denied": "Microphone access denied. Open system settings and allow access.",
       "main.status.testing_accessibility": "Testing accessibility permission...",
       "main.status.accessibility_ready": "Accessibility access looks ready.",
-      "main.status.accessibility_missing": "Accessibility access missing. Open system settings and allow BestText.",
+      "main.status.accessibility_missing": "Accessibility access missing. Open system settings and allow WhisloAI.",
       "main.status.audio_empty_retry": "No audio captured. Try recording again.",
       "main.status.audio_empty": "No audio captured.",
       "main.status.transcribing": "Transcribing...",
@@ -98,7 +98,7 @@
       "main.status.insert_failed": "Automatic insert failed. Text may still be copied. Paste manually with {shortcut}.",
       "main.source.context_action": "context action",
       "main.source.launch_args": "launch args",
-      "settings.title": "BestText Settings",
+      "settings.title": "WhisloAI Settings",
       "settings.hero.title": "Settings",
       "settings.hero.subtitle": "Configure your provider once, test it instantly.",
       "settings.status.ready": "Ready.",
@@ -113,6 +113,10 @@
       "settings.general.language.system": "System",
       "settings.general.language.en": "English",
       "settings.general.language.es": "Español",
+      "settings.creator.title": "Creator",
+      "settings.creator.thanks": "Thanks for using WhisloAI.",
+      "settings.creator.follow": "Follow the build journey on X:",
+      "settings.creator.support": "If you enjoy the app or have questions, follow me on X and open an issue in the project repository.",
       "settings.providers.saved.title": "Saved Providers",
       "settings.providers.new": "New provider",
       "settings.providers.loading": "Loading providers...",
@@ -218,13 +222,13 @@
       "error.no_selected_text": "No selected text detected. Select text and try again.",
     },
     es: {
-      "app.name": "BestText",
+      "app.name": "WhisloAI",
       "modes.simple": "Simple",
       "modes.professional": "Profesional",
       "modes.friendly": "Amigable",
       "modes.casual": "Casual",
       "modes.formal": "Formal",
-      "widget.title": "BestText Quick",
+      "widget.title": "WhisloAI Quick",
       "widget.toolbar.aria": "Acciones rápidas",
       "widget.improve.aria": "Mejorar texto seleccionado usando el modo de escritura elegido",
       "widget.improve.title": "Mejorar texto seleccionado: reescribir con el estilo elegido",
@@ -242,7 +246,7 @@
       "widget.close.default.title": "Cerrar widget (Escape)",
       "widget.close.discard.aria": "Descartar grabación",
       "widget.close.discard.title": "Descartar grabación",
-      "main.title": "BestText",
+      "main.title": "WhisloAI",
       "main.header.subtitle": "Escribí claramente en inglés desde cualquier app.",
       "main.action.widget": "Widget",
       "main.action.settings": "Ajustes",
@@ -289,7 +293,7 @@
       "main.status.microphone_denied": "Acceso al micrófono denegado. Abrí ajustes del sistema y habilitalo.",
       "main.status.testing_accessibility": "Probando permiso de accesibilidad...",
       "main.status.accessibility_ready": "El acceso de accesibilidad parece listo.",
-      "main.status.accessibility_missing": "Falta acceso de accesibilidad. Abrí ajustes del sistema y habilitá BestText.",
+      "main.status.accessibility_missing": "Falta acceso de accesibilidad. Abrí ajustes del sistema y habilitá WhisloAI.",
       "main.status.audio_empty_retry": "No se capturó audio. Probá grabar de nuevo.",
       "main.status.audio_empty": "No se capturó audio.",
       "main.status.transcribing": "Transcribiendo...",
@@ -311,7 +315,7 @@
       "main.status.insert_failed": "Falló la inserción automática. Puede que el texto igual haya quedado copiado. Pegalo manualmente con {shortcut}.",
       "main.source.context_action": "acción de contexto",
       "main.source.launch_args": "argumentos de inicio",
-      "settings.title": "Ajustes de BestText",
+      "settings.title": "Ajustes de WhisloAI",
       "settings.hero.title": "Ajustes",
       "settings.hero.subtitle": "Configurá tu proveedor una vez y probalo al instante.",
       "settings.status.ready": "Listo.",
@@ -326,6 +330,10 @@
       "settings.general.language.system": "Sistema",
       "settings.general.language.en": "English",
       "settings.general.language.es": "Español",
+      "settings.creator.title": "Creador",
+      "settings.creator.thanks": "Gracias por usar WhisloAI.",
+      "settings.creator.follow": "Seguí el desarrollo en X:",
+      "settings.creator.support": "Si te gusta la app o tenés dudas, seguime en X y abrí un issue en el repositorio del proyecto.",
       "settings.providers.saved.title": "Proveedores guardados",
       "settings.providers.new": "Nuevo proveedor",
       "settings.providers.loading": "Cargando proveedores...",
@@ -527,7 +535,7 @@
 
   setLanguagePreference(DEFAULT_PREFERENCE, globalScope.navigator?.language);
 
-  globalScope.BestTextI18n = {
+  globalScope.WhisloAII18n = {
     dictionaries,
     resolveLanguage,
     setLanguagePreference,

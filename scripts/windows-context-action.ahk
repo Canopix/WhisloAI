@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
 
 ; Phase 1 Windows equivalent:
-; Shift + Right Click on selected text -> copy selection -> send to BestText.
+; Shift + Right Click on selected text -> copy selection -> send to WhisloAI.
 +RButton::
 {
   A_Clipboard := ""

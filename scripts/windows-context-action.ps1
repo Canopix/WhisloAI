@@ -5,16 +5,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Resolve-BestTextExecutable {
+function Resolve-WhisloAIExecutable {
   $candidates = @()
 
-  if ($env:BESTTEXT_EXE) {
-    $candidates += $env:BESTTEXT_EXE
+  if ($env:WHISLOAI_EXE) {
+    $candidates += $env:WHISLOAI_EXE
   }
 
   $candidates += @(
-    "$env:LOCALAPPDATA\Programs\BestText\BestText.exe",
-    "$env:ProgramFiles\BestText\BestText.exe",
+    "$env:LOCALAPPDATA\Programs\WhisloAI\WhisloAI.exe",
+    "$env:ProgramFiles\WhisloAI\WhisloAI.exe",
     (Join-Path $PSScriptRoot "..\src-tauri\target\release\app.exe"),
     (Join-Path $PSScriptRoot "..\src-tauri\target\debug\app.exe")
   )
@@ -25,7 +25,7 @@ function Resolve-BestTextExecutable {
     }
   }
 
-  throw "BestText executable not found. Set BESTTEXT_EXE or install the app first."
+  throw "WhisloAI executable not found. Set WHISLOAI_EXE or install the app first."
 }
 
 if ([string]::IsNullOrWhiteSpace($Text)) {
@@ -42,8 +42,8 @@ if ([string]::IsNullOrWhiteSpace($Text)) {
   exit 1
 }
 
-$bestTextExe = Resolve-BestTextExecutable
-$tempPath = Join-Path $env:TEMP ("besttext-selection-" + [guid]::NewGuid().ToString("N") + ".txt")
+$whisloaiExe = Resolve-WhisloAIExecutable
+$tempPath = Join-Path $env:TEMP ("whisloai-selection-" + [guid]::NewGuid().ToString("N") + ".txt")
 [System.IO.File]::WriteAllText($tempPath, $Text, [System.Text.UTF8Encoding]::new($false))
 
-Start-Process -FilePath $bestTextExe -ArgumentList @("--improve-text-file", $tempPath) | Out-Null
+Start-Process -FilePath $whisloaiExe -ArgumentList @("--improve-text-file", $tempPath) | Out-Null

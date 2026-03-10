@@ -1,5 +1,5 @@
 {
-  "name": "best-text",
+  "name": "whisloai",
   "version": "0.1.0",
   "private": true,
   "description": "Minimal desktop writing helper built with Tauri",
@@ -8,7 +8,7 @@
     "clean": "rm -rf dist out .next",
     "rebuild": "npm run clean && npm run build && npm run tauri build",
     "dev": "tauri dev",
-    "run:prod": "npm run build && tauri build --bundles app && open src-tauri/target/release/bundle/macos/BestText.app",
+    "run:prod": "npm run build && tauri build --bundles app && open src-tauri/target/release/bundle/macos/WhisloAI.app",
     "tauri": "tauri"
   },
   "devDependencies": {

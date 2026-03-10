@@ -6,7 +6,7 @@
 function specErrorFor(error) {
   const raw = String(error || "").trim();
   const lower = raw.toLowerCase();
-  const t = window.BestTextI18n?.t || ((key) => key);
+  const t = window.WhisloAII18n?.t || ((key) => key);
 
   if (!raw) return t("error.generic");
 

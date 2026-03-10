@@ -14,11 +14,11 @@ use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-const KEYRING_SERVICE: &str = "best-text";
+const KEYRING_SERVICE: &str = "whisloai";
 const QUICK_WINDOW_WIDTH: f64 = 252.0;
 const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
 const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
-const TRAY_ICON_ID: &str = "besttext-tray";
+const TRAY_ICON_ID: &str = "whisloai-tray";
 const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
 const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
 const TRAY_MENU_QUIT: &str = "tray-quit";
@@ -748,7 +748,7 @@ fn now_millis() -> u128 {
 
 fn is_internal_app_bundle_id(bundle_id: &str) -> bool {
     let value = bundle_id.trim().to_lowercase();
-    value.is_empty() || value.contains("besttext") || value.contains("com.besttext.app")
+    value.is_empty() || value.contains("whisloai") || value.contains("com.whisloai.app")
 }
 
 fn save_last_external_app_bundle(app: &tauri::AppHandle, bundle_id: &str) {
@@ -1382,7 +1382,7 @@ fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     tauri::WebviewWindowBuilder::new(app, "anchor", tauri::WebviewUrl::App("anchor.html".into()))
-        .title("BestText Anchor")
+        .title("WhisloAI Anchor")
         .inner_size(36.0, 36.0)
         .min_inner_size(36.0, 36.0)
         .resizable(false)
@@ -1404,7 +1404,7 @@ fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     tauri::WebviewWindowBuilder::new(app, "quick", tauri::WebviewUrl::App("widget.html".into()))
-        .title("BestText Quick")
+        .title("WhisloAI Quick")
         .inner_size(QUICK_WINDOW_WIDTH, QUICK_WINDOW_HEIGHT_COMPACT)
         .min_inner_size(QUICK_WINDOW_WIDTH, QUICK_WINDOW_HEIGHT_COMPACT)
         .resizable(false)
@@ -1685,9 +1685,9 @@ try
     end try
 
     ignoring case
-      if processName contains "besttext" then return "NONE"
-      if processBundleId contains "besttext" then return "NONE"
-      if processBundleId contains "com.besttext.app" then return "NONE"
+      if processName contains "whisloai" then return "NONE"
+      if processBundleId contains "whisloai" then return "NONE"
+      if processBundleId contains "com.whisloai.app" then return "NONE"
     end ignoring
 
     tell frontProcess
@@ -1906,7 +1906,7 @@ fn settings_webview_url(cache_bust: bool) -> Result<tauri::WebviewUrl, String> {
 
 fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
     let tray_menu = tauri::menu::MenuBuilder::new(app)
-        .text(TRAY_MENU_OPEN_APP, "Open BestText")
+        .text(TRAY_MENU_OPEN_APP, "Open WhisloAI")
         .text(TRAY_MENU_OPEN_SETTINGS, "Settings")
         .separator()
         .text(TRAY_MENU_QUIT, "Quit")
@@ -1915,7 +1915,7 @@ fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
 
     let mut tray_builder = tauri::tray::TrayIconBuilder::with_id(TRAY_ICON_ID)
         .menu(&tray_menu)
-        .tooltip("BestText")
+        .tooltip("WhisloAI")
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_MENU_OPEN_APP => {
@@ -2170,7 +2170,7 @@ fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let window = tauri::WebviewWindowBuilder::new(&app, "settings", settings_webview_url(true)?)
-        .title("BestText Settings")
+        .title("WhisloAI Settings")
         .inner_size(980.0, 760.0)
         .min_inner_size(760.0, 600.0)
         .resizable(true)

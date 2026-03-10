@@ -14,7 +14,7 @@ const listen = (() => {
   }
 })();
 
-const i18n = window.BestTextI18n || null;
+const i18n = window.WhisloAII18n || null;
 const t = (key, params) => (i18n ? i18n.t(key, params) : key);
 const applyTranslations = (root) => {
   if (i18n && typeof i18n.applyTranslations === "function") {

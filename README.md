@@ -1,4 +1,4 @@
-# BestText (MVP bootstrap)
+# WhisloAI (MVP bootstrap)
 
 Minimal Tauri desktop app focused on:
 - Improving English text (`Improve`)
@@ -47,7 +47,7 @@ Implemented:
   - Open `Settings` from the button on the main compact panel
 
 ## macOS right-click action (phase 1)
-This uses a macOS Quick Action that sends selected text to BestText.
+This uses a macOS Quick Action that sends selected text to WhisloAI.
 
 1. Open `Automator` and create a new `Quick Action`.
 2. Configure:
@@ -60,10 +60,10 @@ This uses a macOS Quick Action that sends selected text to BestText.
 5. Use this script body:
 
 ```bash
-/Users/emanuelcanova/Projects/best-text/scripts/macos-context-action.sh "$1"
+<absolute-path-to-repo>/scripts/macos-context-action.sh "$1"
 ```
 
-6. Save it as `Improve English with BestText`.
+6. Save it as `Improve English with WhisloAI`.
 
 Then, select text in Slack/Teams/any app, right click, and run the quick action.
 
@@ -72,7 +72,7 @@ This uses an AutoHotkey helper as a practical equivalent for right-click workflo
 
 Trigger:
 - `Shift + Right Click` on selected text
-- The helper copies selection and opens BestText with that text in `Improve`
+- The helper copies selection and opens WhisloAI with that text in `Improve`
 
 Install (PowerShell):
 
@@ -88,7 +88,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-context-act
 
 Notes:
 - Requires AutoHotkey v2 installed.
-- You can set `BESTTEXT_EXE` env var if your app binary is in a custom path.
+- You can set `WHISLOAI_EXE` env var if your app binary is in a custom path.
 
 Not implemented yet:
 - Native Windows shell extension context menu (current phase 1 uses AutoHotkey helper)
+
+## Creator
+- Built by [@emanuel_build](https://x.com/emanuel_build)
+- If you enjoy WhisloAI or have questions, follow on X and open an issue in the project repository.

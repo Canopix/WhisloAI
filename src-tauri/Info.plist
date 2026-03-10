@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>BestText uses your microphone to transcribe Spanish speech before translating it to English.</string>
+  <string>WhisloAI uses your microphone to transcribe Spanish speech before translating it to English.</string>
 </dict>
 </plist>

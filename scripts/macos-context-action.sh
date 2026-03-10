@@ -7,10 +7,10 @@ if [ -z "${SELECTED_TEXT}" ]; then
   exit 0
 fi
 
-TMP_FILE="$(mktemp /tmp/besttext-input.XXXXXX.txt)"
+TMP_FILE="$(mktemp /tmp/whisloai-input.XXXXXX.txt)"
 printf "%s" "${SELECTED_TEXT}" > "${TMP_FILE}"
 
-open -na "BestText" --args --improve-text-file "${TMP_FILE}"
+open -na "WhisloAI" --args --improve-text-file "${TMP_FILE}"
 
 # Clean temp file after the app has had time to consume it.
 (

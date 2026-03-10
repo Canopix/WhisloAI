@@ -49,7 +49,7 @@ Profesionales que escriben frecuentemente en inglés en herramientas de chat (Sl
 ### Flujo 0 - Disparo desde menú secundario (click derecho)
 1. Usuario selecciona texto en un chat/campo editable.
 2. Hace click derecho.
-3. Elige acción `Improve English with BestText` en el menú secundario.
+3. Elige acción `Improve English with WhisloAI` en el menú secundario.
 4. Se abre panel flotante con el texto pre-cargado en modo `Improve`.
 5. Usuario revisa, ejecuta mejora e inserta resultado.
 
@@ -170,7 +170,7 @@ Regla general:
   - El disparo por menú contextual depende del soporte del sistema/app destino; mantener hotkeys como fallback oficial.
 
 ## 11) Criterios de aceptación
-1. Desde apps compatibles, el click derecho muestra la acción `Improve English with BestText` y abre panel en < 500 ms.
+1. Desde apps compatibles, el click derecho muestra la acción `Improve English with WhisloAI` y abre panel en < 500 ms.
 2. `Improve` transforma texto inglés y permite insertar en cursor.
 3. `Dictate+Translate` permite grabar, editar transcripción y traducir.
 4. Inserción funciona en Slack y Teams en versión desktop/web en al menos 90% de intentos de prueba interna.

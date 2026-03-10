@@ -36,7 +36,7 @@ if (!(Test-Path $sourcePs1) -or !(Test-Path $sourceAhk)) {
   throw "Required files were not found in scripts/."
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA "BestText\WindowsContextAction"
+$installDir = Join-Path $env:LOCALAPPDATA "WhisloAI\WindowsContextAction"
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
 $targetPs1 = Join-Path $installDir "windows-context-action.ps1"
@@ -46,7 +46,7 @@ Copy-Item $sourceAhk $targetAhk -Force
 
 $ahkExe = Resolve-AhkExecutable
 $startupDir = [Environment]::GetFolderPath("Startup")
-$shortcutPath = Join-Path $startupDir "BestText Context Action.lnk"
+$shortcutPath = Join-Path $startupDir "WhisloAI Context Action.lnk"
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
@@ -54,10 +54,10 @@ $shortcut.TargetPath = $ahkExe
 $shortcut.Arguments = '"' + $targetAhk + '"'
 $shortcut.WorkingDirectory = $installDir
 $shortcut.WindowStyle = 7
-$shortcut.Description = "BestText Shift+RightClick context action"
+$shortcut.Description = "WhisloAI Shift+RightClick context action"
 $shortcut.Save()
 
 Write-Host "Installed."
 Write-Host "- Script folder: $installDir"
 Write-Host "- Startup shortcut: $shortcutPath"
-Write-Host "Use Shift + Right Click on selected text to send it to BestText."
+Write-Host "Use Shift + Right Click on selected text to send it to WhisloAI."
