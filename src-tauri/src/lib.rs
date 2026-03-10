@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::path::BaseDirectory;
 use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -23,6 +23,9 @@ const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
 const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
 const TRAY_MENU_QUIT: &str = "tray-quit";
 const SUPPORTED_STYLE_MODES: [&str; 5] = ["simple", "professional", "friendly", "casual", "formal"];
+const INPUT_TARGET_TTL_MS: u128 = 90_000;
+const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
+const REFOCUS_POST_RESTORE_MS: u64 = 35;
 
 #[derive(Default)]
 struct PendingLaunchText(Mutex<Option<String>>);
@@ -31,12 +34,22 @@ struct PendingLaunchText(Mutex<Option<String>>);
 struct PendingQuickAction(Mutex<Option<String>>);
 
 #[derive(Default)]
-struct LastExternalApp(Mutex<Option<String>>);
+struct LastExternalAppBundle(Mutex<Option<String>>);
+
+#[derive(Default)]
+struct LastAnchorPosition(Mutex<Option<AnchorPosition>>);
+
+#[derive(Default)]
+struct LastAnchorTimestamp(Mutex<Option<u128>>);
+
+#[derive(Default)]
+struct LastInputFocusTarget(Mutex<Option<InputFocusTarget>>);
 
 static ANCHOR_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static SETTINGS_WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
 static APP_QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
+static QUICK_OPEN_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +135,20 @@ struct PromptSettingsInput {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct UiSettings {
+    #[serde(default = "default_ui_language_preference")]
+    ui_language_preference: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UiSettingsInput {
+    #[serde(default = "default_ui_language_preference")]
+    ui_language_preference: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct TranscriptionConfig {
     #[serde(default)]
     mode: String,
@@ -151,6 +178,8 @@ struct AppConfig {
     prompt_settings: PromptSettings,
     #[serde(default)]
     transcription: TranscriptionConfig,
+    #[serde(default = "default_ui_language_preference")]
+    ui_language_preference: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,6 +249,14 @@ struct OnboardingStatus {
     needs_accessibility: bool,
 }
 
+#[derive(Debug, Clone)]
+struct InputFocusTarget {
+    bundle_id: String,
+    x: i32,
+    y: i32,
+    captured_at_ms: u128,
+}
+
 impl Default for PromptSettings {
     fn default() -> Self {
         default_prompt_settings()
@@ -234,6 +271,7 @@ impl Default for AppConfig {
             providers: vec![default_provider()],
             prompt_settings: default_prompt_settings(),
             transcription: TranscriptionConfig::default(),
+            ui_language_preference: default_ui_language_preference(),
         }
     }
 }
@@ -284,6 +322,10 @@ fn default_quick_mode() -> String {
     "simple".to_string()
 }
 
+fn default_ui_language_preference() -> String {
+    "system".to_string()
+}
+
 fn default_mode_instruction_for(mode: &str) -> Option<&'static str> {
     match mode {
         "simple" => Some("Use clear, concise wording with everyday vocabulary."),
@@ -326,6 +368,13 @@ fn normalize_mode_name(mode: &str) -> String {
         "pro" => "professional".to_string(),
         "informal" => "casual".to_string(),
         _ => default_quick_mode(),
+    }
+}
+
+fn normalize_ui_language_preference(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "system" | "en" | "es" => value.trim().to_lowercase(),
+        _ => default_ui_language_preference(),
     }
 }
 
@@ -495,6 +544,13 @@ fn load_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
     }
 
     if normalize_prompt_settings(&mut config.prompt_settings) {
+        needs_save = true;
+    }
+
+    let normalized_ui_language_preference =
+        normalize_ui_language_preference(&config.ui_language_preference);
+    if normalized_ui_language_preference != config.ui_language_preference {
+        config.ui_language_preference = normalized_ui_language_preference;
         needs_save = true;
     }
 
@@ -695,64 +751,169 @@ fn is_internal_app_bundle_id(bundle_id: &str) -> bool {
     value.is_empty() || value.contains("besttext") || value.contains("com.besttext.app")
 }
 
-#[cfg(target_os = "macos")]
-fn current_frontmost_bundle_id() -> Option<String> {
-    let script = r#"
-try
-  tell application "System Events"
-    set frontProcess to first application process whose frontmost is true
-    try
-      return bundle identifier of frontProcess as string
-    on error
-      return ""
-    end try
-  end tell
-on error
-  return ""
-end try
-"#;
-
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn current_frontmost_bundle_id() -> Option<String> {
-    None
-}
-
-fn remember_last_external_app(app: &tauri::AppHandle) {
-    let Some(bundle_id) = current_frontmost_bundle_id() else {
-        return;
-    };
-    if is_internal_app_bundle_id(&bundle_id) {
+fn save_last_external_app_bundle(app: &tauri::AppHandle, bundle_id: &str) {
+    let clean = bundle_id.trim();
+    if clean.is_empty() || is_internal_app_bundle_id(clean) {
         return;
     }
-
-    if let Some(state) = app.try_state::<LastExternalApp>() {
+    if let Some(state) = app.try_state::<LastExternalAppBundle>() {
         if let Ok(mut guard) = state.0.lock() {
-            *guard = Some(bundle_id);
+            *guard = Some(clean.to_string());
         }
     }
 }
 
 fn last_external_app(app: &tauri::AppHandle) -> Option<String> {
-    let state = app.try_state::<LastExternalApp>()?;
+    let state = app.try_state::<LastExternalAppBundle>()?;
     let guard = state.0.lock().ok()?;
     guard.clone()
+}
+
+fn save_last_anchor_position(app: &tauri::AppHandle, position: AnchorPosition) {
+    if let Some(state) = app.try_state::<LastAnchorPosition>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = Some(position);
+        }
+    }
+}
+
+fn clear_last_anchor_position(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<LastAnchorPosition>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
+        }
+    }
+}
+
+fn last_anchor_position(app: &tauri::AppHandle) -> Option<AnchorPosition> {
+    let state = app.try_state::<LastAnchorPosition>()?;
+    let guard = state.0.lock().ok()?;
+    *guard
+}
+
+fn save_last_anchor_timestamp(app: &tauri::AppHandle, timestamp: u128) {
+    if let Some(state) = app.try_state::<LastAnchorTimestamp>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = Some(timestamp);
+        }
+    }
+}
+
+fn clear_last_anchor_timestamp(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<LastAnchorTimestamp>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
+        }
+    }
+}
+
+fn last_anchor_timestamp(app: &tauri::AppHandle) -> Option<u128> {
+    let state = app.try_state::<LastAnchorTimestamp>()?;
+    let guard = state.0.lock().ok()?;
+    *guard
+}
+
+fn last_anchor_age_ms(app: &tauri::AppHandle) -> Option<u128> {
+    let timestamp = last_anchor_timestamp(app)?;
+    let now = now_millis();
+    Some(now.saturating_sub(timestamp))
+}
+
+fn save_last_input_focus_target(app: &tauri::AppHandle, target: InputFocusTarget) {
+    if target.bundle_id.trim().is_empty() || is_internal_app_bundle_id(&target.bundle_id) {
+        return;
+    }
+    if let Some(state) = app.try_state::<LastInputFocusTarget>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = Some(target);
+        }
+    }
+}
+
+fn clear_last_input_focus_target(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<LastInputFocusTarget>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
+        }
+    }
+}
+
+fn last_input_focus_target(app: &tauri::AppHandle) -> Option<InputFocusTarget> {
+    let state = app.try_state::<LastInputFocusTarget>()?;
+    let guard = state.0.lock().ok()?;
+    guard.clone()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RefocusAttempt {
+    attempted: bool,
+    ok: bool,
+    target_age_ms: Option<u128>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn refocus_last_input_target(app: &tauri::AppHandle) -> Result<RefocusAttempt, String> {
+    use enigo::Direction::Click;
+    use enigo::{Button, Coordinate, Enigo, Mouse, Settings};
+
+    let Some(target) = last_input_focus_target(app) else {
+        return Ok(RefocusAttempt {
+            attempted: false,
+            ok: false,
+            target_age_ms: None,
+        });
+    };
+
+    let target_age_ms = now_millis().saturating_sub(target.captured_at_ms);
+    if target_age_ms > INPUT_TARGET_TTL_MS || is_internal_app_bundle_id(&target.bundle_id) {
+        return Ok(RefocusAttempt {
+            attempted: false,
+            ok: false,
+            target_age_ms: Some(target_age_ms),
+        });
+    }
+
+    let mut enigo = Enigo::new(&Settings::default())
+        .map_err(|e| format!("Could not initialize input automation for refocus: {e}"))?;
+
+    // Best effort validation: avoid out-of-bounds points on main display.
+    if let Ok((display_w, display_h)) = enigo.main_display() {
+        let max_x = display_w.saturating_sub(1);
+        let max_y = display_h.saturating_sub(1);
+        if target.x < 0 || target.y < 0 || target.x > max_x || target.y > max_y {
+            return Ok(RefocusAttempt {
+                attempted: false,
+                ok: false,
+                target_age_ms: Some(target_age_ms),
+            });
+        }
+    }
+
+    let original_cursor = enigo
+        .location()
+        .map_err(|e| format!("Could not read current cursor position: {e}"))?;
+
+    enigo
+        .move_mouse(target.x, target.y, Coordinate::Abs)
+        .map_err(|e| format!("Could not move cursor to input target: {e}"))?;
+    enigo
+        .button(Button::Left, Click)
+        .map_err(|e| format!("Could not click input target: {e}"))?;
+    thread::sleep(std::time::Duration::from_millis(REFOCUS_CLICK_STABILIZE_MS));
+
+    let _ = enigo.move_mouse(original_cursor.0, original_cursor.1, Coordinate::Abs);
+    thread::sleep(std::time::Duration::from_millis(REFOCUS_POST_RESTORE_MS));
+
+    Ok(RefocusAttempt {
+        attempted: true,
+        ok: true,
+        target_age_ms: Some(target_age_ms),
+    })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn refocus_last_input_target(_app: &tauri::AppHandle) -> Result<RefocusAttempt, String> {
+    Err("Input refocus is not supported on this platform.".to_string())
 }
 
 fn escape_applescript_string(value: &str) -> String {
@@ -1195,6 +1356,13 @@ struct AnchorPosition {
     y: i32,
 }
 
+#[derive(Debug, Clone)]
+struct FocusedAnchorSnapshot {
+    position: AnchorPosition,
+    bundle_id: Option<String>,
+    input_focus_point: Option<(i32, i32)>,
+}
+
 fn show_main_window_for_onboarding(app: &tauri::AppHandle) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.show();
@@ -1252,78 +1420,143 @@ fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn position_quick_window_near_anchor(app: &tauri::AppHandle) {
-    let Some(quick) = app.get_webview_window("quick") else {
-        return;
-    };
+fn to_u64_saturating(value: u128) -> u64 {
+    value.min(u64::MAX as u128) as u64
+}
 
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(position) = focused_text_anchor_position() {
-            let quick_size = quick.outer_size().unwrap_or_default();
+fn clamp_quick_window_position(
+    anchor: &tauri::WebviewWindow,
+    default_x: i32,
+    default_y: i32,
+    quick_width: i32,
+    quick_height: i32,
+) -> (i32, i32) {
+    if let Ok(Some(monitor)) = anchor.monitor_from_point(default_x as f64, default_y as f64) {
+        let work = monitor.work_area();
+        let min_x = work.position.x + 8;
+        let min_y = work.position.y + 8;
+        let max_x = (work.position.x + work.size.width as i32 - quick_width - 8).max(min_x);
+        let max_y = (work.position.y + work.size.height as i32 - quick_height - 8).max(min_y);
+        (default_x.clamp(min_x, max_x), default_y.clamp(min_y, max_y))
+    } else {
+        (default_x.max(8), default_y.max(8))
+    }
+}
+
+fn position_quick_window_near_anchor(app: &tauri::AppHandle) -> (&'static str, Option<u128>) {
+    let Some(quick) = app.get_webview_window("quick") else {
+        return ("quick-window-missing", None);
+    };
+    let quick_size = quick.outer_size().unwrap_or_default();
+    let quick_width = quick_size.width as i32;
+    let quick_height = quick_size.height as i32;
+
+    if let Some(position) = last_anchor_position(app) {
+        if let Some(anchor) = app.get_webview_window("anchor") {
             let default_x = position.x + 34;
             let default_y = position.y;
-
-            let mut x = default_x;
-            let mut y = default_y;
-
-            if let Some(anchor) = app.get_webview_window("anchor") {
-                if let Ok(Some(monitor)) =
-                    anchor.monitor_from_point(position.x as f64, position.y as f64)
-                {
-                    let work = monitor.work_area();
-                    let min_x = work.position.x + 8;
-                    let min_y = work.position.y + 8;
-                    let max_x =
-                        (work.position.x + work.size.width as i32 - quick_size.width as i32 - 8)
-                            .max(min_x);
-                    let max_y =
-                        (work.position.y + work.size.height as i32 - quick_size.height as i32 - 8)
-                            .max(min_y);
-                    x = x.clamp(min_x, max_x);
-                    y = y.clamp(min_y, max_y);
-                } else {
-                    x = x.max(8);
-                    y = y.max(8);
-                }
-            } else {
-                x = x.max(8);
-                y = y.max(8);
-            }
-
+            let (x, y) = clamp_quick_window_position(
+                &anchor,
+                default_x,
+                default_y,
+                quick_width,
+                quick_height,
+            );
             let _ = quick.set_position(Position::Physical(PhysicalPosition::new(x, y)));
-            return;
+            return ("anchor-cache", last_anchor_age_ms(app));
         }
     }
 
     if let Some(anchor) = app.get_webview_window("anchor") {
         if let Ok(pos) = anchor.outer_position() {
-            let quick_size = quick.outer_size().unwrap_or_default();
             let default_x = pos.x + 34;
             let default_y = pos.y;
-
-            let mut x = default_x;
-            let mut y = default_y;
-
-            if let Ok(Some(monitor)) = anchor.monitor_from_point(pos.x as f64, pos.y as f64) {
-                let work = monitor.work_area();
-                let min_x = work.position.x + 8;
-                let min_y = work.position.y + 8;
-                let max_x =
-                    (work.position.x + work.size.width as i32 - quick_size.width as i32 - 8)
-                        .max(min_x);
-                let max_y =
-                    (work.position.y + work.size.height as i32 - quick_size.height as i32 - 8)
-                        .max(min_y);
-                x = x.clamp(min_x, max_x);
-                y = y.clamp(min_y, max_y);
-            } else {
-                x = x.max(8);
-                y = y.max(8);
-            }
-
+            let (x, y) = clamp_quick_window_position(
+                &anchor,
+                default_x,
+                default_y,
+                quick_width,
+                quick_height,
+            );
             let _ = quick.set_position(Position::Physical(PhysicalPosition::new(x, y)));
+            return ("anchor-window", None);
         }
+    }
+
+    ("unpositioned", None)
+}
+
+fn log_quick_open_trace(
+    request_id: u64,
+    action: Option<&str>,
+    outcome: &str,
+    error: Option<&str>,
+    position_source: &str,
+    cache_age_ms: Option<u128>,
+    external_cache_hit: bool,
+    phases: &[(String, u128)],
+    total_ms: u128,
+) {
+    let phase_payload = phases
+        .iter()
+        .map(|(name, elapsed)| {
+            (
+                name.clone(),
+                serde_json::Value::from(to_u64_saturating(*elapsed)),
+            )
+        })
+        .collect::<serde_json::Map<String, serde_json::Value>>();
+
+    let payload = serde_json::json!({
+        "event": "quick_open_trace",
+        "request_id": request_id,
+        "action": action.unwrap_or("open-app"),
+        "outcome": outcome,
+        "error": error.unwrap_or(""),
+        "position_source": position_source,
+        "cache_age_ms": cache_age_ms.map(to_u64_saturating),
+        "external_cache_hit": external_cache_hit,
+        "phases_ms": phase_payload,
+        "total_ms": to_u64_saturating(total_ms),
+    });
+
+    if cfg!(debug_assertions) {
+        log::info!("{payload}");
+        return;
+    }
+
+    if outcome != "ok" || total_ms >= 180 {
+        log::warn!("{payload}");
+    }
+}
+
+fn log_auto_insert_trace(
+    outcome: &str,
+    error: Option<&str>,
+    target_age_ms: Option<u128>,
+    refocus_attempted: bool,
+    refocus_ok: bool,
+    paste_ok: bool,
+    total_ms: u128,
+) {
+    let payload = serde_json::json!({
+        "event": "auto_insert_trace",
+        "outcome": outcome,
+        "error": error.unwrap_or(""),
+        "target_age_ms": target_age_ms.map(to_u64_saturating),
+        "refocus_attempted": refocus_attempted,
+        "refocus_ok": refocus_ok,
+        "paste_ok": paste_ok,
+        "total_ms": to_u64_saturating(total_ms),
+    });
+
+    if cfg!(debug_assertions) {
+        log::info!("{payload}");
+        return;
+    }
+
+    if outcome != "ok" || !paste_ok {
+        log::warn!("{payload}");
     }
 }
 
@@ -1331,34 +1564,111 @@ fn open_quick_window_with_action(
     app: &tauri::AppHandle,
     action: Option<String>,
 ) -> Result<(), String> {
-    remember_last_external_app(app);
-    ensure_quick_window(app)?;
-    position_quick_window_near_anchor(app);
+    let request_id = QUICK_OPEN_REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let total_started = Instant::now();
+    let mut phases: Vec<(String, u128)> = Vec::with_capacity(6);
+    let mut position_source = "unpositioned";
+    let mut cache_age_ms = None;
+    let mut external_cache_hit = false;
 
-    let window = app
-        .get_webview_window("quick")
-        .ok_or_else(|| "Quick window not found.".to_string())?;
+    let result = (|| -> Result<(), String> {
+        let remember_started = Instant::now();
+        external_cache_hit = last_external_app(app).is_some();
+        phases.push((
+            "remember_last_external_app".to_string(),
+            remember_started.elapsed().as_millis(),
+        ));
 
-    if window.is_minimized().unwrap_or(false) {
-        let _ = window.unminimize();
-    }
+        let ensure_started = Instant::now();
+        ensure_quick_window(app)?;
+        phases.push((
+            "ensure_quick_window".to_string(),
+            ensure_started.elapsed().as_millis(),
+        ));
 
-    window
-        .show()
-        .map_err(|e| format!("Could not show quick window: {e}"))?;
-    if let Err(error) = window.set_focus() {
-        log::warn!("Could not focus quick window: {error}");
-    }
+        let position_started = Instant::now();
+        let (source, cache_age) = position_quick_window_near_anchor(app);
+        position_source = source;
+        cache_age_ms = cache_age;
+        phases.push((
+            "position_quick_window".to_string(),
+            position_started.elapsed().as_millis(),
+        ));
 
-    if let Some(value) = action {
-        emit_quick_action(app, &value);
-    }
+        let window = app
+            .get_webview_window("quick")
+            .ok_or_else(|| "Quick window not found.".to_string())?;
 
-    Ok(())
+        let hide_anchor_started = Instant::now();
+        if let Some(anchor) = app.get_webview_window("anchor") {
+            let _ = anchor.hide();
+        }
+        phases.push((
+            "hide_anchor_window".to_string(),
+            hide_anchor_started.elapsed().as_millis(),
+        ));
+
+        if window.is_minimized().unwrap_or(false) {
+            let unminimize_started = Instant::now();
+            let _ = window.unminimize();
+            phases.push((
+                "unminimize_window".to_string(),
+                unminimize_started.elapsed().as_millis(),
+            ));
+        }
+
+        let show_started = Instant::now();
+        window
+            .show()
+            .map_err(|e| format!("Could not show quick window: {e}"))?;
+        phases.push((
+            "show_window".to_string(),
+            show_started.elapsed().as_millis(),
+        ));
+
+        let focus_started = Instant::now();
+        if let Err(error) = window.set_focus() {
+            log::warn!("Could not focus quick window: {error}");
+        }
+        phases.push((
+            "focus_window".to_string(),
+            focus_started.elapsed().as_millis(),
+        ));
+
+        if let Some(value) = action.as_deref() {
+            let emit_started = Instant::now();
+            emit_quick_action(app, value);
+            phases.push((
+                "emit_quick_action".to_string(),
+                emit_started.elapsed().as_millis(),
+            ));
+        }
+
+        Ok(())
+    })();
+
+    let total_ms = total_started.elapsed().as_millis();
+    let (outcome, error) = match &result {
+        Ok(_) => ("ok", None),
+        Err(error) => ("error", Some(error.as_str())),
+    };
+    log_quick_open_trace(
+        request_id,
+        action.as_deref(),
+        outcome,
+        error,
+        position_source,
+        cache_age_ms,
+        external_cache_hit,
+        &phases,
+        total_ms,
+    );
+
+    result
 }
 
 #[cfg(target_os = "macos")]
-fn focused_text_anchor_position() -> Option<AnchorPosition> {
+fn focused_text_anchor_snapshot() -> Option<FocusedAnchorSnapshot> {
     let script = r#"
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView"}
 set blockedTerms to {"address", "url", "navigation", "omnibox", "search", "buscar", "password", "contraseña", "contrasena", "email", "correo"}
@@ -1422,7 +1732,7 @@ try
       set py to item 2 of p as integer
       set pw to item 1 of s as integer
       set ph to item 2 of s as integer
-      return (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)
+      return processBundleId & tab & (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)
     end tell
   end tell
 on error
@@ -1444,20 +1754,40 @@ end try
         return None;
     }
 
-    let mut parts = raw.split(',').map(str::trim);
+    let (bundle_raw, geometry_raw) = raw.split_once('\t')?;
+    let mut parts = geometry_raw.split(',').map(str::trim);
     let x = parts.next()?.parse::<i32>().ok()?;
     let y = parts.next()?.parse::<i32>().ok()?;
     let w = parts.next()?.parse::<i32>().ok()?;
-    let _h = parts.next()?.parse::<i32>().ok()?;
+    let h = parts.next()?.parse::<i32>().ok()?;
 
-    Some(AnchorPosition {
-        x: (x + w - 10).max(8),
-        y: (y - 44).max(8), // Above the input row, not among inline icons (emoji, mic, etc.)
+    let bundle_id = {
+        let clean = bundle_raw.trim();
+        if clean.is_empty() {
+            None
+        } else {
+            Some(clean.to_string())
+        }
+    };
+
+    let input_focus_point = if w > 2 && h > 2 {
+        Some((x + (w / 2), y + (h / 2)))
+    } else {
+        None
+    };
+
+    Some(FocusedAnchorSnapshot {
+        position: AnchorPosition {
+            x: (x + w - 10).max(8),
+            y: (y - 44).max(8), // Above the input row, not among inline icons (emoji, mic, etc.)
+        },
+        bundle_id,
+        input_focus_point,
     })
 }
 
 #[cfg(not(target_os = "macos"))]
-fn focused_text_anchor_position() -> Option<AnchorPosition> {
+fn focused_text_anchor_snapshot() -> Option<FocusedAnchorSnapshot> {
     None
 }
 
@@ -1484,15 +1814,55 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             if SETTINGS_WINDOW_OPEN.load(Ordering::SeqCst) {
                 let _ = anchor.hide();
                 last = None;
-                thread::sleep(std::time::Duration::from_millis(420));
+                clear_last_anchor_position(&app);
+                clear_last_anchor_timestamp(&app);
+                clear_last_input_focus_target(&app);
+                thread::sleep(std::time::Duration::from_millis(180));
                 continue;
             }
 
-            let next = focused_text_anchor_position();
+            if let Some(quick) = app.get_webview_window("quick") {
+                if quick.is_visible().unwrap_or(false) {
+                    let _ = anchor.hide();
+                    last = None;
+                    thread::sleep(std::time::Duration::from_millis(180));
+                    continue;
+                }
+            }
+
+            let snapshot = focused_text_anchor_snapshot();
+            let next = snapshot.as_ref().map(|entry| entry.position);
+
+            if let Some(entry) = snapshot.as_ref() {
+                save_last_anchor_position(&app, entry.position);
+                save_last_anchor_timestamp(&app, now_millis());
+                if let Some(bundle_id) = entry.bundle_id.as_deref() {
+                    save_last_external_app_bundle(&app, bundle_id);
+                    if let Some((focus_x, focus_y)) = entry.input_focus_point {
+                        save_last_input_focus_target(
+                            &app,
+                            InputFocusTarget {
+                                bundle_id: bundle_id.to_string(),
+                                x: focus_x.max(1),
+                                y: focus_y.max(1),
+                                captured_at_ms: now_millis(),
+                            },
+                        );
+                    } else {
+                        clear_last_input_focus_target(&app);
+                    }
+                } else {
+                    clear_last_input_focus_target(&app);
+                }
+            } else {
+                clear_last_anchor_position(&app);
+                clear_last_anchor_timestamp(&app);
+                clear_last_input_focus_target(&app);
+            }
+
             if next != last {
                 match next {
                     Some(position) => {
-                        remember_last_external_app(&app);
                         let _ = anchor.set_position(Position::Physical(PhysicalPosition::new(
                             position.x, position.y,
                         )));
@@ -1505,7 +1875,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 last = next;
             }
 
-            thread::sleep(std::time::Duration::from_millis(420));
+            thread::sleep(std::time::Duration::from_millis(180));
         }
     });
 }
@@ -1602,6 +1972,14 @@ fn get_prompt_settings(app: tauri::AppHandle) -> Result<PromptSettings, String> 
 }
 
 #[tauri::command]
+fn get_ui_settings(app: tauri::AppHandle) -> Result<UiSettings, String> {
+    let config = load_config(&app)?;
+    Ok(UiSettings {
+        ui_language_preference: normalize_ui_language_preference(&config.ui_language_preference),
+    })
+}
+
+#[tauri::command]
 fn get_transcription_config(app: tauri::AppHandle) -> Result<TranscriptionConfig, String> {
     let config = load_config(&app)?;
     Ok(config.transcription)
@@ -1651,14 +2029,10 @@ async fn download_whisper_model(app: tauri::AppHandle, model_id: String) -> Resu
     let dest_path = models_dir.join(*filename);
 
     if dest_path.exists() {
-        return Ok(dest_path
-            .to_string_lossy()
-            .to_string());
+        return Ok(dest_path.to_string_lossy().to_string());
     }
 
-    let url = format!(
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{filename}"
-    );
+    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{filename}");
 
     let client = reqwest::Client::new();
     let response = client
@@ -1968,6 +2342,24 @@ fn save_prompt_settings(
 }
 
 #[tauri::command]
+fn save_ui_settings(
+    app: tauri::AppHandle,
+    ui_settings: UiSettingsInput,
+) -> Result<UiSettings, String> {
+    let mut config = load_config(&app)?;
+    let normalized = normalize_ui_language_preference(&ui_settings.ui_language_preference);
+    config.ui_language_preference = normalized.clone();
+    save_config(&app, &config)?;
+
+    let payload = UiSettings {
+        ui_language_preference: normalized,
+    };
+    app.emit("ui-language-changed", &payload)
+        .map_err(|e| format!("Could not emit ui-language-changed: {e}"))?;
+    Ok(payload)
+}
+
+#[tauri::command]
 fn save_provider(
     app: tauri::AppHandle,
     provider: ProviderInput,
@@ -2272,10 +2664,7 @@ fn transcribe_with_local_whisper(
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &Default::default())
         .map_err(|e| format!("Could not create decoder: {e}"))?;
-    let sample_rate = track
-        .codec_params
-        .sample_rate
-        .unwrap_or(16000) as u32;
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(16000) as u32;
     use symphonia::core::audio::AudioBufferRef;
     let mut samples: Vec<f32> = Vec::new();
     while let Ok(packet) = format.format.next_packet() {
@@ -2312,7 +2701,9 @@ fn transcribe_with_local_whisper(
     };
     let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
         .map_err(|e| format!("Could not load Whisper model: {e}"))?;
-    let mut state = ctx.create_state().map_err(|e| format!("Could not create state: {e}"))?;
+    let mut state = ctx
+        .create_state()
+        .map_err(|e| format!("Could not create state: {e}"))?;
     let mut params = FullParams::new(SamplingStrategy::BeamSearch {
         beam_size: 5,
         patience: -1.0,
@@ -2378,7 +2769,9 @@ async fn transcribe_audio(
                 }
             }
         }
-        return Err("Local model path not set or file not found. Configure in Settings.".to_string());
+        return Err(
+            "Local model path not set or file not found. Configure in Settings.".to_string(),
+        );
     }
 
     let provider = active_provider(&config)?;
@@ -2441,6 +2834,7 @@ async fn transcribe_audio(
 
 #[tauri::command]
 fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextResult, String> {
+    let total_started = Instant::now();
     let value = text.trim();
     if value.is_empty() {
         return Err("Nothing to insert.".to_string());
@@ -2460,6 +2854,48 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
     restore_last_external_app(&app);
     thread::sleep(std::time::Duration::from_millis(180));
 
+    let (target_age_ms, refocus_attempted, refocus_ok) = match refocus_last_input_target(&app) {
+        Ok(attempt) => (attempt.target_age_ms, attempt.attempted, attempt.ok),
+        Err(error) => {
+            let result = InsertTextResult {
+                copied: true,
+                pasted: false,
+                message: format!("Automatic paste skipped: could not restore input focus: {error}"),
+            };
+            log_auto_insert_trace(
+                "refocus-error",
+                Some(error.as_str()),
+                None,
+                true,
+                false,
+                false,
+                total_started.elapsed().as_millis(),
+            );
+            return Ok(result);
+        }
+    };
+
+    if !refocus_ok {
+        let result = InsertTextResult {
+            copied: true,
+            pasted: false,
+            message:
+                "Automatic paste skipped: input focus target not restored. Click target input and try again."
+                    .to_string(),
+        };
+        log_auto_insert_trace(
+            "focus-target-not-restored",
+            None,
+            target_age_ms,
+            refocus_attempted,
+            false,
+            false,
+            total_started.elapsed().as_millis(),
+        );
+        return Ok(result);
+    }
+
+    let mut paste_error_message: Option<String> = None;
     let result = match simulate_paste_shortcut() {
         Ok(()) => InsertTextResult {
             copied: true,
@@ -2469,7 +2905,10 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
         Err(error) => InsertTextResult {
             copied: true,
             pasted: false,
-            message: format!("Automatic paste failed: {error}"),
+            message: {
+                paste_error_message = Some(error.clone());
+                format!("Automatic paste failed: {error}")
+            },
         },
     };
 
@@ -2479,6 +2918,16 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
             let _ = app.clipboard().write_text(prev);
         }
     }
+
+    log_auto_insert_trace(
+        if result.pasted { "ok" } else { "paste-error" },
+        paste_error_message.as_deref(),
+        target_age_ms,
+        refocus_attempted,
+        refocus_ok,
+        result.pasted,
+        total_started.elapsed().as_millis(),
+    );
 
     Ok(result)
 }
@@ -2567,7 +3016,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingLaunchText::default())
         .manage(PendingQuickAction::default())
-        .manage(LastExternalApp::default())
+        .manage(LastExternalAppBundle::default())
+        .manage(LastAnchorPosition::default())
+        .manage(LastAnchorTimestamp::default())
+        .manage(LastInputFocusTarget::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
@@ -2632,6 +3084,7 @@ pub fn run() {
             list_providers,
             get_hotkeys,
             get_prompt_settings,
+            get_ui_settings,
             get_transcription_config,
             save_transcription_config,
             list_whisper_models,
@@ -2650,6 +3103,7 @@ pub fn run() {
             capture_selected_text,
             save_hotkeys,
             save_prompt_settings,
+            save_ui_settings,
             save_provider,
             set_active_provider,
             delete_provider,

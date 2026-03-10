@@ -6,8 +6,30 @@ const invoke = (() => {
   }
 })();
 
+const listen = (() => {
+  try {
+    return window.__TAURI__?.event?.listen || null;
+  } catch (_) {
+    return null;
+  }
+})();
+
+const i18n = window.BestTextI18n || null;
+const t = (key, params) => (i18n ? i18n.t(key, params) : key);
+const applyTranslations = (root) => {
+  if (i18n && typeof i18n.applyTranslations === "function") {
+    i18n.applyTranslations(root);
+  }
+};
+const setLanguagePreference = (preference) => {
+  if (i18n && typeof i18n.setLanguagePreference === "function") {
+    i18n.setLanguagePreference(preference, navigator.language);
+  }
+};
+
 const statusEl = document.getElementById("status");
 const providersSummaryEl = document.getElementById("providers-summary");
+const uiLanguagePreferenceEl = document.getElementById("ui-language-preference");
 
 const providersList = document.getElementById("providers-list");
 const providerForm = document.getElementById("provider-form");
@@ -63,6 +85,8 @@ const DEFAULT_PROMPT_SETTINGS = {
 
 let cachedProviders = [];
 let selectedProviderId = null;
+let providersLoaded = false;
+let currentUiLanguagePreference = "system";
 
 function normalizeError(error) {
   const text = String(error || "Unknown error.");
@@ -92,6 +116,10 @@ function providerHost(baseUrl) {
 function setStatus(message, tone = "neutral") {
   statusEl.textContent = message;
   statusEl.dataset.tone = tone;
+}
+
+function setStatusKey(key, tone = "neutral", params) {
+  setStatus(t(key, params), tone);
 }
 
 function hasView(view) {
@@ -126,7 +154,7 @@ function activateView(view, syncHash = true) {
   }
 
   if (nextView !== "providers") {
-    setStatus("Ready.", "neutral");
+    setStatusKey("settings.status.ready", "neutral");
   }
 }
 
@@ -140,6 +168,38 @@ function normalizeMode(mode) {
   return ["simple", "professional", "friendly", "casual", "formal"].includes(value)
     ? value
     : "simple";
+}
+
+function quickModeOptionLabel(mode) {
+  const labels = {
+    simple: ["✍️", "settings.mode.simple.label"],
+    professional: ["🧑‍💻", "settings.mode.professional.label"],
+    friendly: ["📢", "settings.mode.friendly.label"],
+    casual: ["💬", "settings.mode.casual.label"],
+    formal: ["🧠", "settings.mode.formal.label"],
+  };
+  const [emoji, key] = labels[mode] || labels.simple;
+  return `${emoji} ${t(key)}`;
+}
+
+function renderQuickModeOptions() {
+  const selected = normalizeMode(quickDefaultMode.value);
+  quickDefaultMode.innerHTML = "";
+  ["simple", "professional", "friendly", "casual", "formal"].forEach((mode) => {
+    const option = document.createElement("option");
+    option.value = mode;
+    option.textContent = quickModeOptionLabel(mode);
+    quickDefaultMode.appendChild(option);
+  });
+  quickDefaultMode.value = selected;
+}
+
+function applySettingsTranslations() {
+  applyTranslations(document);
+  renderQuickModeOptions();
+  if (providersLoaded) {
+    renderProvidersList(selectedProviderId);
+  }
 }
 
 function buildProviderPayload() {
@@ -193,10 +253,13 @@ function renderProvidersSummary() {
   const total = cachedProviders.length;
   const active = cachedProviders.find((provider) => provider.isActive);
   if (!total) {
-    providersSummaryEl.textContent = "No providers saved yet.";
+    providersSummaryEl.textContent = t("settings.providers.none");
     return;
   }
-  providersSummaryEl.textContent = `${total} saved. Active: ${active ? active.name : "none"}.`;
+  providersSummaryEl.textContent = t("settings.providers.summary", {
+    total,
+    active: active ? active.name : t("settings.providers.active_none"),
+  });
 }
 
 function renderProvidersList(preferredId) {
@@ -214,7 +277,7 @@ function renderProvidersList(preferredId) {
   if (!cachedProviders.length) {
     const empty = document.createElement("li");
     empty.className = "providers-empty";
-    empty.textContent = "No providers yet. Create one from the form on the right.";
+    empty.textContent = t("settings.providers.none_list");
     providersList.appendChild(empty);
     resetProviderForm();
     return;
@@ -224,7 +287,7 @@ function renderProvidersList(preferredId) {
     const item = document.createElement("li");
     const button = document.createElement("button");
     const keyClass = provider.hasApiKey ? "is-key-ok" : "is-key-missing";
-    const keyLabel = provider.hasApiKey ? "API key saved locally" : "API key missing";
+    const keyLabel = provider.hasApiKey ? t("settings.card.key_saved") : t("settings.card.key_missing");
     button.type = "button";
     button.className = `provider-card-btn ${provider.isActive ? "is-active" : ""} ${
       provider.id === selectedProviderId ? "is-selected" : ""
@@ -232,7 +295,7 @@ function renderProvidersList(preferredId) {
     button.innerHTML = `
       <span class="provider-card-top">
         <span class="provider-name">${escapeHtml(provider.name)}</span>
-        <span class="provider-chip ${provider.isActive ? "is-active" : ""}">${provider.isActive ? "Active" : "Inactive"}</span>
+        <span class="provider-chip ${provider.isActive ? "is-active" : ""}">${provider.isActive ? t("settings.card.active") : t("settings.card.inactive")}</span>
       </span>
       <span class="provider-meta">${escapeHtml(provider.providerType)} · ${escapeHtml(providerHost(provider.baseUrl))}</span>
       <span class="provider-key ${keyClass}">${keyLabel}</span>
@@ -241,7 +304,7 @@ function renderProvidersList(preferredId) {
     button.addEventListener("click", () => {
       fillProviderForm(provider);
       renderProvidersList(provider.id);
-      setStatus(`Editing provider: ${provider.name}.`, "neutral");
+      setStatus(t("settings.status.editing_provider", { name: provider.name }), "neutral");
     });
 
     item.appendChild(button);
@@ -255,6 +318,7 @@ function renderProvidersList(preferredId) {
 
 async function loadProviders(preferredId = null) {
   cachedProviders = await invoke("list_providers");
+  providersLoaded = true;
   renderProvidersList(preferredId || selectedProviderId || providerId.value || null);
 }
 
@@ -269,11 +333,11 @@ async function saveProvider(event) {
     !payload.translateModel ||
     !payload.transcribeModel
   ) {
-    setStatus("Complete all provider fields before saving.", "error");
+    setStatusKey("settings.status.complete_provider_fields", "error");
     return;
   }
 
-  setStatus("Saving provider...", "loading");
+  setStatusKey("settings.status.saving_provider", "loading");
 
   try {
     const keyValue = providerApiKey.value.trim();
@@ -284,8 +348,8 @@ async function saveProvider(event) {
     await loadProviders(saved.id);
     setStatus(
       saved.hasApiKey
-        ? `Saved ${saved.name}.`
-        : `Saved ${saved.name}. Add API key if you want to run requests.`,
+        ? t("settings.status.saved_provider", { name: saved.name })
+        : t("settings.status.saved_provider_no_key", { name: saved.name }),
       "success",
     );
   } catch (error) {
@@ -296,22 +360,27 @@ async function saveProvider(event) {
 async function activateProvider() {
   const currentId = providerId.value.trim();
   if (!currentId) {
-    setStatus("Select a provider before setting it active.", "error");
+    setStatusKey("settings.status.select_provider_activate", "error");
     return;
   }
 
   const selected = cachedProviders.find((provider) => provider.id === currentId) || null;
   if (selected?.isActive) {
-    setStatus(`${selected.name} is already active.`, "neutral");
+    setStatus(t("settings.status.provider_already_active", { name: selected.name }), "neutral");
     return;
   }
 
-  setStatus("Setting active provider...", "loading");
+  setStatusKey("settings.status.setting_active_provider", "loading");
   try {
     await invoke("set_active_provider", { providerId: currentId });
     await loadProviders(currentId);
     const provider = cachedProviders.find((item) => item.id === currentId);
-    setStatus(`Active provider set: ${provider ? provider.name : "updated"}.`, "success");
+    setStatus(
+      t("settings.status.active_provider_set", {
+        name: provider ? provider.name : t("settings.status.active_provider_updated"),
+      }),
+      "success",
+    );
   } catch (error) {
     setStatus(normalizeError(error), "error");
   }
@@ -320,26 +389,26 @@ async function activateProvider() {
 async function deleteProvider() {
   const currentId = providerId.value.trim();
   if (!currentId) {
-    setStatus("Select a provider before deleting it.", "error");
+    setStatusKey("settings.status.select_provider_delete", "error");
     return;
   }
 
   const selected = cachedProviders.find((provider) => provider.id === currentId) || null;
   if (!selected) {
-    setStatus("Selected provider was not found.", "error");
+    setStatusKey("settings.status.selected_provider_not_found", "error");
     return;
   }
 
-  const confirmed = window.confirm(`Delete provider "${selected.name}"?`);
+  const confirmed = window.confirm(t("settings.confirm.delete_provider", { name: selected.name }));
   if (!confirmed) {
     return;
   }
 
-  setStatus(`Deleting ${selected.name}...`, "loading");
+  setStatus(t("settings.status.deleting_provider", { name: selected.name }), "loading");
   try {
     await invoke("delete_provider", { providerId: currentId });
     await loadProviders();
-    setStatus(`Deleted provider: ${selected.name}.`, "success");
+    setStatus(t("settings.status.deleted_provider", { name: selected.name }), "success");
   } catch (error) {
     setStatus(normalizeError(error), "error");
   }
@@ -348,11 +417,11 @@ async function deleteProvider() {
 async function testProvider() {
   const payload = buildProviderPayload();
   if (!payload.name || !payload.baseUrl) {
-    setStatus("Complete provider name and base URL before testing.", "error");
+    setStatusKey("settings.status.complete_name_url_test", "error");
     return;
   }
 
-  setStatus(`Testing ${payload.name}...`, "loading");
+  setStatus(t("settings.status.testing_provider", { name: payload.name }), "loading");
   try {
     const message = await invoke("test_provider_connection_input", {
       provider: payload,
@@ -381,6 +450,7 @@ function fillPromptForm(settings) {
   modeCasual.value = modeInstructions.casual || DEFAULT_PROMPT_SETTINGS.modeInstructions.casual;
   modeFormal.value = modeInstructions.formal || DEFAULT_PROMPT_SETTINGS.modeInstructions.formal;
   quickDefaultMode.value = normalizeMode(value.quickMode || DEFAULT_PROMPT_SETTINGS.quickMode);
+  renderQuickModeOptions();
 }
 
 function buildPromptPayload() {
@@ -417,16 +487,69 @@ async function savePromptSettings(event) {
     !payload.modeInstructions.casual ||
     !payload.modeInstructions.formal
   ) {
-    setStatus("Complete all prompts and mode instructions before saving.", "error");
+    setStatusKey("settings.status.complete_prompts", "error");
     return;
   }
 
-  setStatus("Saving prompts and modes...", "loading");
+  setStatusKey("settings.status.saving_prompts", "loading");
   try {
     const saved = await invoke("save_prompt_settings", { promptSettings: payload });
     fillPromptForm(saved);
-    setStatus("Prompts and modes saved.", "success");
+    setStatusKey("settings.status.prompts_saved", "success");
   } catch (error) {
+    setStatus(normalizeError(error), "error");
+  }
+}
+
+async function loadUiSettings() {
+  if (!invoke) {
+    currentUiLanguagePreference = "system";
+    if (uiLanguagePreferenceEl) {
+      uiLanguagePreferenceEl.value = currentUiLanguagePreference;
+    }
+    setLanguagePreference(currentUiLanguagePreference);
+    applySettingsTranslations();
+    return;
+  }
+
+  try {
+    const settings = await invoke("get_ui_settings");
+    currentUiLanguagePreference = String(settings?.uiLanguagePreference || "system");
+  } catch (_) {
+    currentUiLanguagePreference = "system";
+  }
+
+  if (uiLanguagePreferenceEl) {
+    uiLanguagePreferenceEl.value = currentUiLanguagePreference;
+  }
+  setLanguagePreference(currentUiLanguagePreference);
+  applySettingsTranslations();
+}
+
+async function saveUiLanguagePreference(nextPreference) {
+  if (!invoke) {
+    currentUiLanguagePreference = nextPreference;
+    setLanguagePreference(currentUiLanguagePreference);
+    applySettingsTranslations();
+    return;
+  }
+
+  try {
+    const saved = await invoke("save_ui_settings", {
+      uiSettings: {
+        uiLanguagePreference: nextPreference,
+      },
+    });
+    currentUiLanguagePreference = String(saved?.uiLanguagePreference || nextPreference);
+    if (uiLanguagePreferenceEl) {
+      uiLanguagePreferenceEl.value = currentUiLanguagePreference;
+    }
+    setLanguagePreference(currentUiLanguagePreference);
+    applySettingsTranslations();
+  } catch (error) {
+    if (uiLanguagePreferenceEl) {
+      uiLanguagePreferenceEl.value = currentUiLanguagePreference;
+    }
     setStatus(normalizeError(error), "error");
   }
 }
@@ -438,13 +561,19 @@ deleteProviderBtn.addEventListener("click", deleteProvider);
 newProviderBtn.addEventListener("click", () => {
   resetProviderForm();
   activateView("providers");
-  setStatus("New provider form ready.", "neutral");
+  setStatusKey("settings.status.new_provider_ready", "neutral");
 });
 promptForm.addEventListener("submit", savePromptSettings);
 resetPromptBtn.addEventListener("click", () => {
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
-  setStatus("Prompt defaults restored (not saved yet).", "neutral");
+  setStatusKey("settings.status.prompt_defaults_restored", "neutral");
 });
+
+if (uiLanguagePreferenceEl) {
+  uiLanguagePreferenceEl.addEventListener("change", () => {
+    saveUiLanguagePreference(String(uiLanguagePreferenceEl.value || "system"));
+  });
+}
 
 function syncTranscriptionLocalVisibility() {
   transcriptionLocalSection.hidden = transcriptionMode.value !== "local";
@@ -474,16 +603,16 @@ async function renderWhisperModels() {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "settings-btn-secondary";
-      btn.textContent = "Download";
+      btn.textContent = t("settings.action.download");
       btn.dataset.modelId = m.id;
       btn.addEventListener("click", async () => {
         btn.disabled = true;
-        setStatus(`Downloading ${m.id}...`, "loading");
+        setStatus(t("settings.status.downloading_model", { id: m.id }), "loading");
         try {
           const path = await invoke("download_whisper_model", { modelId: m.id });
           localModelPath.value = path;
           await saveTranscriptionConfig();
-          setStatus(`Downloaded ${m.id}.`, "success");
+          setStatus(t("settings.status.downloaded_model", { id: m.id }), "success");
         } catch (err) {
           setStatus(normalizeError(err), "error");
         } finally {
@@ -495,13 +624,13 @@ async function renderWhisperModels() {
       whisperModelsContainer.appendChild(row);
     }
   } catch (_) {
-    whisperModelsContainer.innerHTML = "<p class=\"hint\">Could not load models list.</p>";
+    whisperModelsContainer.innerHTML = `<p class="hint">${escapeHtml(t("settings.transcription.load_models_failed"))}</p>`;
   }
 }
 
 async function saveTranscriptionConfig() {
   if (!invoke) return;
-  setStatus("Saving transcription settings...", "loading");
+  setStatusKey("settings.status.saving_transcription", "loading");
   try {
     const path = transcriptionMode.value === "local" ? localModelPath.value.trim() : "";
     await invoke("save_transcription_config", {
@@ -510,7 +639,7 @@ async function saveTranscriptionConfig() {
         localModelPath: path || null,
       },
     });
-    setStatus("Transcription settings saved.", "success");
+    setStatusKey("settings.status.transcription_saved", "success");
   } catch (error) {
     setStatus(normalizeError(error), "error");
   }
@@ -578,15 +707,37 @@ async function bootstrap() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
   }
+
+  await loadUiSettings();
+
   if (!invoke) {
-    setStatus("App not ready. View switching works.", "error");
+    setStatusKey("settings.status.app_not_ready", "error");
     return;
   }
+
   try {
-    await Promise.all([loadProviders(), loadPromptSettings(), loadTranscriptionConfig(), renderWhisperModels()]);
-    setStatus("Ready.", "neutral");
+    if (listen) {
+      await listen("ui-language-changed", async (event) => {
+        const nextPreference = String(event?.payload?.uiLanguagePreference || "system");
+        currentUiLanguagePreference = nextPreference;
+        if (uiLanguagePreferenceEl) {
+          uiLanguagePreferenceEl.value = nextPreference;
+        }
+        setLanguagePreference(currentUiLanguagePreference);
+        applySettingsTranslations();
+        await renderWhisperModels();
+      });
+    }
+
+    await Promise.all([
+      loadProviders(),
+      loadPromptSettings(),
+      loadTranscriptionConfig(),
+      renderWhisperModels(),
+    ]);
+    setStatusKey("settings.status.ready", "neutral");
   } catch (error) {
-    setStatus(`Failed to load settings: ${normalizeError(error)}`, "error");
+    setStatus(t("settings.status.failed_load", { error: normalizeError(error) }), "error");
   }
 }
 

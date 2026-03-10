@@ -1,5 +1,17 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const i18n = window.BestTextI18n || null;
+const t = (key, params) => (i18n ? i18n.t(key, params) : key);
+const applyTranslations = (root) => {
+  if (i18n && typeof i18n.applyTranslations === "function") {
+    i18n.applyTranslations(root);
+  }
+};
+const setLanguagePreference = (preference) => {
+  if (i18n && typeof i18n.setLanguagePreference === "function") {
+    i18n.setLanguagePreference(preference, navigator.language);
+  }
+};
 
 const tabs = document.querySelectorAll(".tab");
 const panels = document.querySelectorAll(".panel");
@@ -41,6 +53,9 @@ let mediaRecorder = null;
 let mediaStream = null;
 let mediaChunks = [];
 let isTranscribingAudio = false;
+let isRecordingAudio = false;
+let isRecordingAudioStarting = false;
+let recordingStartNonce = 0;
 let onboardingDismissedForSession = false;
 let onboardingAutoPromptTriggered = false;
 let recordingAudioContext = null;
@@ -48,6 +63,14 @@ let recordingAnalyser = null;
 let recordingDataArray = null;
 let recordingFrameHandle = null;
 let recordingBars = [];
+let currentUiLanguagePreference = "system";
+let currentStatusState = { type: "key", key: "main.status.ready", params: null, isError: false };
+let currentRecordingState = {
+  type: "key",
+  key: "main.recording.state.idle",
+  params: null,
+  isError: false,
+};
 
 const RECORDING_WAVE_BARS = 24;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
@@ -56,9 +79,26 @@ function formatError(error) {
   return typeof specErrorFor === "function" ? specErrorFor(error) : String(error || "").replace(/^Error: /, "");
 }
 
-function setStatus(message, isError = false) {
+function applyStatusMessage(message, isError = false, state = null) {
   statusEl.textContent = message;
   statusEl.dataset.tone = isError ? "error" : "neutral";
+  currentStatusState = state || { type: "text", message, isError };
+}
+
+function setStatus(message, isError = false) {
+  applyStatusMessage(message, isError, { type: "text", message, isError });
+}
+
+function setStatusKey(key, isError = false, params = null) {
+  applyStatusMessage(t(key, params), isError, { type: "key", key, params, isError });
+}
+
+function refreshStatusTranslation() {
+  if (currentStatusState.type === "key") {
+    applyStatusMessage(t(currentStatusState.key, currentStatusState.params), currentStatusState.isError, {
+      ...currentStatusState,
+    });
+  }
 }
 
 function normalizeMode(mode) {
@@ -80,10 +120,27 @@ function switchTab(tabName) {
   });
 }
 
-function setRecordingState(message, isError = false) {
+function applyRecordingState(message, isError = false, state = null) {
   recordingStateEl.textContent = message;
   recordingStateEl.style.color = isError ? "#b91c1c" : "";
   recordingStateEl.hidden = !message;
+  currentRecordingState = state || { type: "text", message, isError };
+}
+
+function setRecordingState(message, isError = false) {
+  applyRecordingState(message, isError, { type: "text", message, isError });
+}
+
+function setRecordingStateKey(key, isError = false, params = null) {
+  applyRecordingState(t(key, params), isError, { type: "key", key, params, isError });
+}
+
+function refreshRecordingStateTranslation() {
+  if (currentRecordingState.type === "key") {
+    applyRecordingState(t(currentRecordingState.key, currentRecordingState.params), currentRecordingState.isError, {
+      ...currentRecordingState,
+    });
+  }
 }
 
 function setRecordingVisualizerVisible(visible) {
@@ -211,6 +268,10 @@ function setOnboardingStatusMessage(target, message, isError = false) {
   target.style.color = isError ? "#b91c1c" : "#1f2a37";
 }
 
+function setOnboardingStatusKey(target, key, isError = false, params = null) {
+  setOnboardingStatusMessage(target, t(key, params), isError);
+}
+
 function setOnboardingVisible(visible) {
   onboardingPanel.hidden = !visible;
 
@@ -218,6 +279,36 @@ function setOnboardingVisible(visible) {
   if (mainContent) {
     mainContent.hidden = visible;
   }
+}
+
+function localizeImportSource(source) {
+  const value = String(source || "")
+    .trim()
+    .toLowerCase();
+  if (value === "context action" || value === "context-action" || value === "single-instance") {
+    return t("main.source.context_action");
+  }
+  if (value === "launch args" || value === "launch-args") {
+    return t("main.source.launch_args");
+  }
+  return source;
+}
+
+function applyMainTranslations() {
+  applyTranslations(document);
+  refreshStatusTranslation();
+  refreshRecordingStateTranslation();
+}
+
+async function loadUiSettings() {
+  try {
+    const settings = await invoke("get_ui_settings");
+    currentUiLanguagePreference = String(settings?.uiLanguagePreference || "system");
+  } catch (_) {
+    currentUiLanguagePreference = "system";
+  }
+  setLanguagePreference(currentUiLanguagePreference);
+  applyMainTranslations();
 }
 
 async function openPermissionSettings(permission) {
@@ -230,27 +321,19 @@ async function openPermissionSettings(permission) {
 
 async function requestOnboardingMicrophonePermission() {
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-    setOnboardingStatusMessage(
-      onboardingMicStatus,
-      "Microphone permission request is not available in this runtime.",
-      true,
-    );
+    setOnboardingStatusKey(onboardingMicStatus, "main.status.recording_permission_unavailable", true);
     return;
   }
 
   onboardingMicBtn.disabled = true;
-  setOnboardingStatusMessage(onboardingMicStatus, "Requesting microphone access...");
+  setOnboardingStatusKey(onboardingMicStatus, "main.status.requesting_microphone");
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
-    setOnboardingStatusMessage(onboardingMicStatus, "Microphone access granted.");
+    setOnboardingStatusKey(onboardingMicStatus, "main.status.microphone_granted");
   } catch (error) {
-    setOnboardingStatusMessage(
-      onboardingMicStatus,
-      "Microphone access denied. Open system settings and allow access.",
-      true,
-    );
+    setOnboardingStatusKey(onboardingMicStatus, "main.status.microphone_denied", true);
     setStatus(formatError(error), true);
   } finally {
     onboardingMicBtn.disabled = false;
@@ -259,17 +342,13 @@ async function requestOnboardingMicrophonePermission() {
 
 async function testOnboardingAccessibilityPermission() {
   onboardingAccessibilityBtn.disabled = true;
-  setOnboardingStatusMessage(onboardingAccessibilityStatus, "Testing accessibility permission...");
+  setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.testing_accessibility");
 
   try {
     await invoke("probe_auto_insert_permission");
-    setOnboardingStatusMessage(onboardingAccessibilityStatus, "Accessibility access looks ready.");
+    setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.accessibility_ready");
   } catch (error) {
-    setOnboardingStatusMessage(
-      onboardingAccessibilityStatus,
-      "Accessibility access missing. Open system settings and allow BestText.",
-      true,
-    );
+    setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.accessibility_missing", true);
     setStatus(formatError(error), true);
   } finally {
     onboardingAccessibilityBtn.disabled = false;
@@ -280,7 +359,7 @@ async function finishOnboarding() {
   try {
     await invoke("complete_onboarding");
     setOnboardingVisible(false);
-    setStatus("Setup completed.");
+    setStatusKey("main.status.setup_completed");
   } catch (error) {
     setStatus(formatError(error), true);
   }
@@ -289,15 +368,15 @@ async function finishOnboarding() {
 function skipOnboardingForSession() {
   onboardingDismissedForSession = true;
   setOnboardingVisible(false);
-  setStatus("Setup skipped for now.");
+  setStatusKey("main.status.setup_skipped");
 }
 
 function applyOnboardingStatus(status) {
   const needsAccessibility = Boolean(status && status.needsAccessibility);
   onboardingAccessibilityStep.hidden = !needsAccessibility;
 
-  setOnboardingStatusMessage(onboardingMicStatus, "Not checked yet.");
-  setOnboardingStatusMessage(onboardingAccessibilityStatus, "Not checked yet.");
+  setOnboardingStatusKey(onboardingMicStatus, "main.onboarding.status.not_checked");
+  setOnboardingStatusKey(onboardingAccessibilityStatus, "main.onboarding.status.not_checked");
 
   const shouldShow = Boolean(status && !status.completed && !onboardingDismissedForSession);
   setOnboardingVisible(shouldShow);
@@ -318,6 +397,8 @@ function releaseMediaStream() {
     mediaStream.getTracks().forEach((track) => track.stop());
     mediaStream = null;
   }
+  isRecordingAudio = false;
+  isRecordingAudioStarting = false;
   stopRecordingVisualizer();
 }
 
@@ -344,7 +425,7 @@ function applyExternalImproveText(text, source = "external") {
   improveInput.value = text.trim();
   improveInput.focus();
   improveInput.setSelectionRange(improveInput.value.length, improveInput.value.length);
-  setStatus(`Text imported from ${source}.`);
+  setStatusKey("main.status.imported", false, { source: localizeImportSource(source) });
 }
 
 function arrayBufferToBase64(arrayBuffer) {
@@ -362,15 +443,15 @@ function arrayBufferToBase64(arrayBuffer) {
 
 async function transcribeRecordedBlob(blob) {
   if (!blob || blob.size === 0) {
-    setRecordingState("No audio captured. Try recording again.", true);
-    setStatus("No audio captured.", true);
+    setRecordingStateKey("main.status.audio_empty_retry", true);
+    setStatusKey("main.status.audio_empty", true);
     return;
   }
 
   isTranscribingAudio = true;
   setRecordingButtons(false);
-    setRecordingState("Transcribing…");
-  setStatus("Transcribing audio...");
+  setRecordingStateKey("main.status.transcribing");
+  setStatusKey("main.status.transcribing_audio");
 
   try {
     const base64Audio = arrayBufferToBase64(await blob.arrayBuffer());
@@ -383,8 +464,8 @@ async function transcribeRecordedBlob(blob) {
     switchTab("translate");
     translateInput.focus();
     translateInput.setSelectionRange(translateInput.value.length, translateInput.value.length);
-    setRecordingState("Transcription ready. You can edit and translate.");
-    setStatus("Audio transcribed.");
+    setRecordingStateKey("main.status.transcription_ready");
+    setStatusKey("main.status.audio_transcribed");
   } catch (error) {
     const msg = formatError(error);
     setRecordingState(msg, true);
@@ -397,6 +478,9 @@ async function transcribeRecordedBlob(blob) {
 
 async function startAudioRecording() {
   if (isTranscribingAudio) {
+    return;
+  }
+  if (isRecordingAudioStarting || isRecordingAudio || (mediaRecorder && mediaRecorder.state === "recording")) {
     return;
   }
 
@@ -415,34 +499,77 @@ async function startAudioRecording() {
   }
 
   try {
+    const startNonce = ++recordingStartNonce;
+    isRecordingAudioStarting = true;
+    recordAudioBtn.disabled = true;
+    stopAudioBtn.disabled = true;
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (startNonce !== recordingStartNonce || document.hidden) {
+      releaseMediaStream();
+      setRecordingButtons(false);
+      return;
+    }
+    isRecordingAudio = true;
+    isRecordingAudioStarting = false;
     startRecordingVisualizer(mediaStream);
     mediaChunks = [];
 
     const preferredMime = pickRecorderMimeType();
     const options = preferredMime ? { mimeType: preferredMime } : undefined;
     mediaRecorder = new MediaRecorder(mediaStream, options);
+    const recorder = mediaRecorder;
+    let recorderErrored = false;
 
-    mediaRecorder.addEventListener("dataavailable", (event) => {
+    recorder.addEventListener("dataavailable", (event) => {
       if (event.data && event.data.size > 0) {
         mediaChunks.push(event.data);
       }
     });
 
-    mediaRecorder.addEventListener("stop", async () => {
-      const mimeType = mediaRecorder ? mediaRecorder.mimeType : preferredMime || "audio/webm";
+    recorder.addEventListener("error", () => {
+      recorderErrored = true;
+      isRecordingAudio = false;
+      isRecordingAudioStarting = false;
+      const msg = formatError("Audio recording failed");
+      setRecordingState(msg, true);
+      setStatus(msg, true);
+      if (recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch (_) {
+          releaseMediaStream();
+          mediaRecorder = null;
+          setRecordingButtons(false);
+        }
+      } else {
+        releaseMediaStream();
+        mediaRecorder = null;
+        setRecordingButtons(false);
+      }
+    });
+
+    recorder.addEventListener("stop", async () => {
+      const mimeType = recorder.mimeType || preferredMime || "audio/webm";
       const blob = new Blob(mediaChunks, { type: mimeType });
+      mediaChunks = [];
+      isRecordingAudio = false;
+      isRecordingAudioStarting = false;
       mediaRecorder = null;
       releaseMediaStream();
       setRecordingButtons(false);
+      if (recorderErrored) {
+        return;
+      }
       await transcribeRecordedBlob(blob);
     });
 
-    mediaRecorder.start(250);
+    recorder.start(250);
     setRecordingButtons(true);
     setRecordingState("");
     setStatus("");
   } catch (error) {
+    isRecordingAudio = false;
+    isRecordingAudioStarting = false;
     mediaRecorder = null;
     releaseMediaStream();
     setRecordingButtons(false);
@@ -453,6 +580,8 @@ async function startAudioRecording() {
 }
 
 function stopAudioRecording() {
+  recordingStartNonce += 1;
+  isRecordingAudioStarting = false;
   if (!mediaRecorder || mediaRecorder.state !== "recording") {
     releaseMediaStream();
     return;
@@ -463,22 +592,31 @@ function stopAudioRecording() {
   mediaRecorder.stop();
 }
 
+function handleMainVisibilityChange() {
+  if (!document.hidden) {
+    return;
+  }
+  if (mediaStream || isRecordingAudio || isRecordingAudioStarting || (mediaRecorder && mediaRecorder.state === "recording")) {
+    stopAudioRecording();
+  }
+}
+
 async function handleImprove() {
   const input = improveInput.value.trim();
   if (!input) {
-    setStatus("Write some English text first.", true);
+    setStatusKey("main.status.write_english_first", true);
     return;
   }
 
   improveBtn.disabled = true;
-  setStatus("Improving text...");
+  setStatusKey("main.status.improving");
   try {
     const output = await invoke("improve_text", {
       input,
       style: improveStyle.value,
     });
     improveOutput.value = output;
-    setStatus("Text improved.");
+    setStatusKey("main.status.text_improved");
   } catch (error) {
     setStatus(formatError(error), true);
   } finally {
@@ -489,19 +627,19 @@ async function handleImprove() {
 async function handleTranslate() {
   const input = translateInput.value.trim();
   if (!input) {
-    setStatus("Write or paste text in the source language first.", true);
+    setStatusKey("main.status.write_source_first", true);
     return;
   }
 
   translateBtn.disabled = true;
-  setStatus("Translating text...");
+  setStatusKey("main.status.translating");
   try {
     const output = await invoke("translate_text", {
       input,
       style: translateStyle.value,
     });
     translateOutput.value = output;
-    setStatus("Text translated.");
+    setStatusKey("main.status.text_translated");
   } catch (error) {
     setStatus(formatError(error), true);
   } finally {
@@ -511,37 +649,31 @@ async function handleTranslate() {
 
 async function copyText(text) {
   if (!text.trim()) {
-    setStatus("Nothing to copy.", true);
+    setStatusKey("main.status.nothing_to_copy", true);
     return;
   }
   await navigator.clipboard.writeText(text);
-  setStatus("Copied to clipboard.");
+  setStatusKey("main.status.copied");
 }
 
 async function insertTextAtCursor(text) {
   const value = text.trim();
   if (!value) {
-    setStatus("Nothing to insert.", true);
+    setStatusKey("main.status.nothing_to_insert", true);
     return;
   }
 
-  setStatus("Copying and inserting...");
+  setStatusKey("main.status.copying_inserting");
   try {
     const result = await invoke("auto_insert_text", { text: value });
     if (result && result.pasted) {
-      setStatus("Inserted in active app.");
+      setStatusKey("main.status.inserted");
       return;
     }
 
-    setStatus(
-      `Automatic paste failed. Text copied to clipboard. Paste manually with ${pasteShortcutHint()}.`,
-      true,
-    );
+    setStatusKey("main.status.paste_failed", true, { shortcut: pasteShortcutHint() });
   } catch (error) {
-    setStatus(
-      `Automatic insert failed. Text may still be copied. Paste manually with ${pasteShortcutHint()}.`,
-      true,
-    );
+    setStatusKey("main.status.insert_failed", true, { shortcut: pasteShortcutHint() });
   }
 }
 
@@ -611,12 +743,14 @@ onboardingAccessibilityBtn.addEventListener("click", testOnboardingAccessibility
 onboardingAccessibilitySettingsBtn.addEventListener("click", () => openPermissionSettings("accessibility"));
 onboardingFinishBtn.addEventListener("click", finishOnboarding);
 onboardingSkipBtn.addEventListener("click", skipOnboardingForSession);
+document.addEventListener("visibilitychange", handleMainVisibilityChange);
 window.addEventListener("beforeunload", releaseMediaStream);
 
 async function bootstrap() {
+  await loadUiSettings();
   setRecordingButtons(false);
   stopRecordingVisualizer();
-  setRecordingState("Microphone idle.");
+  setRecordingStateKey("main.recording.state.idle");
   try {
     try {
       const promptSettings = await invoke("get_prompt_settings");
@@ -626,6 +760,12 @@ async function bootstrap() {
     } catch (_) {
       // keep UI defaults
     }
+
+    await listen("ui-language-changed", (event) => {
+      currentUiLanguagePreference = String(event?.payload?.uiLanguagePreference || "system");
+      setLanguagePreference(currentUiLanguagePreference);
+      applyMainTranslations();
+    });
 
     await listen("external-improve-text", (event) => {
       const payload = event.payload;
@@ -670,9 +810,9 @@ async function bootstrap() {
 
     const onboardingStatus = await invoke("get_onboarding_status");
     applyOnboardingStatus(onboardingStatus);
-    setStatus("Ready.");
+    setStatusKey("main.status.ready");
   } catch (error) {
-    setStatus(`Error al iniciar: ${formatError(error)}`, true);
+    setStatusKey("main.status.startup_error", true, { error: formatError(error) });
   }
 }
 

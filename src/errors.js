@@ -1,25 +1,24 @@
 /**
- * Maps backend/raw errors to user-facing messages per spec section 9.
+ * Maps backend/raw errors to localized user-facing messages.
  * @param {unknown} error - Raw error from invoke or exception
- * @returns {string} User-friendly message in Spanish
+ * @returns {string} User-friendly message
  */
 function specErrorFor(error) {
   const raw = String(error || "").trim();
   const lower = raw.toLowerCase();
+  const t = window.BestTextI18n?.t || ((key) => key);
 
-  if (!raw) return "Ocurrió un error.";
+  if (!raw) return t("error.generic");
 
-  // 0. API key faltante o inválida
   if (
     lower.includes("api key") ||
     lower.includes("missing api key") ||
     lower.includes("no provider configured") ||
     lower.includes("provider not found")
   ) {
-    return "Configurá una API key válida para continuar. Abrí Settings.";
+    return t("error.api_key");
   }
 
-  // 1. Micrófono no disponible
   if (
     lower.includes("microphone") ||
     lower.includes("mediarecorder") ||
@@ -29,19 +28,17 @@ function specErrorFor(error) {
     lower.includes("could not access") ||
     lower.includes("recording failed")
   ) {
-    return "No se pudo acceder al micrófono. Revisá permisos del sistema.";
+    return t("error.microphone");
   }
 
-  // 2. Transcripción vacía o baja confianza
   if (
     lower.includes("audio payload is empty") ||
     lower.includes("no audio captured") ||
     lower.includes("transcription response was empty")
   ) {
-    return "No pudimos transcribir claramente. Probá grabar de nuevo.";
+    return t("error.transcription_empty");
   }
 
-  // 3. Falla de red/API
   if (
     lower.includes("connection failed") ||
     lower.includes("provider request failed") ||
@@ -53,22 +50,20 @@ function specErrorFor(error) {
     lower.includes("network") ||
     /http \d{3}/.test(lower)
   ) {
-    return "No se pudo procesar el texto por un problema de conexión.";
+    return t("error.network");
   }
 
-  // 4. Inserción fallida - handled in insertResultText, not from raw error
   if (lower.includes("automatic paste failed")) {
-    return "No pudimos pegar automáticamente. El texto quedó copiado.";
+    return t("error.auto_paste");
   }
 
-  // No selected text - keep clear but in Spanish
   if (lower.includes("no selected text")) {
-    return "No se detectó texto seleccionado. Seleccioná y probá de nuevo.";
+    return t("error.no_selected_text");
   }
 
-  // Strip "Error: " prefix if present
   if (raw.startsWith("Error: ")) {
     return raw.slice(7);
   }
+
   return raw;
 }

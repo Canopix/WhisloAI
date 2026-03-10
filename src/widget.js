@@ -1,5 +1,17 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const i18n = window.BestTextI18n || null;
+const t = (key, params) => (i18n ? i18n.t(key, params) : key);
+const applyTranslations = (root) => {
+  if (i18n && typeof i18n.applyTranslations === "function") {
+    i18n.applyTranslations(root);
+  }
+};
+const setLanguagePreference = (preference) => {
+  if (i18n && typeof i18n.setLanguagePreference === "function") {
+    i18n.setLanguagePreference(preference, navigator.language);
+  }
+};
 
 const quickShell = document.getElementById("quick-shell");
 const quickToolbar = document.querySelector(".quick-toolbar");
@@ -25,10 +37,34 @@ let recordingFrameHandle = null;
 let recordingBars = [];
 let lastExpandedState = null;
 let quickMode = "simple";
+let quickModeLoadedAt = 0;
 let recordingAborted = false;
+let dictationStartNonce = 0;
+let uiLanguagePreference = "system";
 
 const QUICK_WAVE_BAR_COUNT = 20;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
+const QUICK_MODE_CACHE_MS = 30_000;
+const DICTATION_CHUNK_MS = 250;
+
+function nowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function logDictationTrace(event, payload) {
+  try {
+    const data = {
+      event,
+      ...payload,
+    };
+    console.info("[dictation_trace]", JSON.stringify(data));
+  } catch (_) {
+    // no-op
+  }
+}
 
 function normalizeMode(mode) {
   const value = String(mode || "")
@@ -69,13 +105,31 @@ function setCloseIcon(icon) {
   renderLucideIcons();
 }
 
+function applyWidgetDynamicTranslations() {
+  const recordingVisible = quickToolbar.classList.contains("is-recording");
+  closeBtn.title = recordingVisible ? t("widget.close.discard.title") : t("widget.close.default.title");
+  closeBtn.setAttribute(
+    "aria-label",
+    recordingVisible ? t("widget.close.discard.aria") : t("widget.close.default.aria"),
+  );
+  const stopBtn = document.getElementById("quick-stop-btn");
+  if (stopBtn) {
+    stopBtn.title = t("widget.stopRecording.title");
+    stopBtn.setAttribute("aria-label", t("widget.stopRecording.aria"));
+  }
+  updateDictateButton();
+}
+
 function setRecordingVisualizerVisible(visible) {
   if (dictateSpinnerEl) dictateSpinnerEl.hidden = true;
   if (dictateIconEl) dictateIconEl.hidden = visible;
   if (quickDictateWaveWrapEl) quickDictateWaveWrapEl.hidden = !visible;
   setCloseIcon(visible ? "trash-2" : "x");
-  closeBtn.title = visible ? "Discard recording" : "Close widget (Escape)";
-  closeBtn.setAttribute("aria-label", visible ? "Discard recording" : "Close widget");
+  closeBtn.title = visible ? t("widget.close.discard.title") : t("widget.close.default.title");
+  closeBtn.setAttribute(
+    "aria-label",
+    visible ? t("widget.close.discard.aria") : t("widget.close.default.aria"),
+  );
   quickToolbar.classList.toggle("is-recording", visible);
   syncQuickWindowLayout(true, visible);
 }
@@ -195,8 +249,11 @@ function setPreparingSpinner(visible) {
 function updateDictateButton() {
   setDictateGlyph(isRecording ? "circle-stop" : "mic");
   dictateBtn.classList.toggle("is-recording", isRecording);
-  dictateBtn.setAttribute("aria-label", isRecording ? "Stop dictation" : "Start dictation — Record speech, transcribe, then translate");
-  dictateBtn.title = isRecording ? "Stop dictation" : "Start dictation — Record speech, transcribe, then translate";
+  dictateBtn.setAttribute(
+    "aria-label",
+    isRecording ? t("widget.dictate.stop.aria") : t("widget.dictate.start.aria"),
+  );
+  dictateBtn.title = isRecording ? t("widget.dictate.stop.title") : t("widget.dictate.start.title");
   dictateBtn.disabled = isBusy && !isRecording;
 }
 
@@ -241,7 +298,7 @@ async function runSelectionAction(mode) {
     return;
   }
 
-  await loadQuickMode();
+  const modePromise = loadQuickMode();
   setBusy(true);
 
   try {
@@ -249,6 +306,7 @@ async function runSelectionAction(mode) {
     if (!input || !String(input).trim()) {
       throw new Error("No selected text detected");
     }
+    await modePromise;
 
     const output =
       mode === "improve"
@@ -273,40 +331,74 @@ async function startDictation() {
     return;
   }
 
+  const clickStartedAt = nowMs();
   try {
+    const startNonce = ++dictationStartNonce;
     setBusy(true);
     setPreparingSpinner(true);
 
+    const getMediaStartedAt = nowMs();
     activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (startNonce !== dictationStartNonce || document.hidden) {
+      stopAndReleaseStream();
+      setBusy(false);
+      setPreparingSpinner(false);
+      updateDictateButton();
+      return;
+    }
+    const mediaReadyMs = nowMs() - getMediaStartedAt;
+
     mediaRecorder = new MediaRecorder(activeStream);
+    const recorder = mediaRecorder;
     recordedChunks = [];
+    let recorderErrored = false;
 
-    startRecordingVisualizer(activeStream);
-    isRecording = true;
-    setBusy(false);
-    updateDictateButton();
-
-    mediaRecorder.ondataavailable = (event) => {
+    recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         recordedChunks.push(event.data);
       }
     };
 
-    mediaRecorder.onerror = () => {};
+    recorder.onerror = () => {
+      recorderErrored = true;
+      recordingAborted = true;
+      if (recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch (_) {
+          isRecording = false;
+          mediaRecorder = null;
+          stopAndReleaseStream();
+          setBusy(false);
+          setPreparingSpinner(false);
+          updateDictateButton();
+        }
+      } else {
+        isRecording = false;
+        mediaRecorder = null;
+        stopAndReleaseStream();
+        setBusy(false);
+        setPreparingSpinner(false);
+        updateDictateButton();
+      }
+    };
 
-    mediaRecorder.onstop = async () => {
+    recorder.onstop = async () => {
+      const stopStartedAt = nowMs();
       const aborted = recordingAborted;
       recordingAborted = false;
 
-      const mimeType = mediaRecorder.mimeType || "audio/webm";
+      const mimeType = recorder.mimeType || "audio/webm";
+      const blobBuildStartedAt = nowMs();
       const blob = aborted ? null : new Blob(recordedChunks, { type: mimeType });
+      const blobBuildMs = nowMs() - blobBuildStartedAt;
       recordedChunks = [];
       mediaRecorder = null;
       stopAndReleaseStream();
       isRecording = false;
       updateDictateButton();
 
-      if (aborted || !blob || !blob.size) {
+      if (recorderErrored || aborted || !blob || !blob.size) {
         setBusy(false);
         setPreparingSpinner(false);
         return;
@@ -316,21 +408,47 @@ async function startDictation() {
       setPreparingSpinner(true);
 
       try {
+        const modePromise = loadQuickMode();
+        const encodeStartedAt = nowMs();
         const audioBase64 = await blobToBase64(blob);
+        const encodeMs = nowMs() - encodeStartedAt;
+
+        const transcribeStartedAt = nowMs();
         const transcript = await invoke("transcribe_audio", {
           audioBase64,
           mimeType: blob.type || undefined,
         });
+        const transcribeMs = nowMs() - transcribeStartedAt;
 
-        await loadQuickMode();
+        await modePromise;
+        const translateStartedAt = nowMs();
         const output = await invoke("translate_text", {
           input: transcript,
           style: quickMode,
         });
+        const translateMs = nowMs() - translateStartedAt;
 
+        const insertStartedAt = nowMs();
         await insertResultText(output);
+        const insertMs = nowMs() - insertStartedAt;
+
+        logDictationTrace("stop_to_insert", {
+          aborted: false,
+          blob_size_bytes: blob.size,
+          blob_build_ms: Number(blobBuildMs.toFixed(1)),
+          encode_ms: Number(encodeMs.toFixed(1)),
+          transcribe_ms: Number(transcribeMs.toFixed(1)),
+          translate_ms: Number(translateMs.toFixed(1)),
+          insert_ms: Number(insertMs.toFixed(1)),
+          total_ms: Number((nowMs() - stopStartedAt).toFixed(1)),
+        });
       } catch (error) {
-        // silent
+        logDictationTrace("stop_to_insert_error", {
+          aborted: false,
+          blob_size_bytes: blob.size,
+          blob_build_ms: Number(blobBuildMs.toFixed(1)),
+          total_ms: Number((nowMs() - stopStartedAt).toFixed(1)),
+        });
       } finally {
         setBusy(false);
         setPreparingSpinner(false);
@@ -338,16 +456,35 @@ async function startDictation() {
       }
     };
 
-    mediaRecorder.start();
+    recorder.start(DICTATION_CHUNK_MS);
+    isRecording = true;
+    setBusy(false);
+    setPreparingSpinner(false);
+    updateDictateButton();
+    requestAnimationFrame(() => {
+      if (activeStream && isRecording) {
+        startRecordingVisualizer(activeStream);
+      }
+    });
+    logDictationTrace("start_recording", {
+      get_user_media_ms: Number(mediaReadyMs.toFixed(1)),
+      click_to_recording_ms: Number((nowMs() - clickStartedAt).toFixed(1)),
+    });
   } catch (error) {
     isRecording = false;
     updateDictateButton();
     stopAndReleaseStream();
     setBusy(false);
+    setPreparingSpinner(false);
+    logDictationTrace("start_recording_error", {
+      click_to_error_ms: Number((nowMs() - clickStartedAt).toFixed(1)),
+      message: String(error?.message || error || "unknown"),
+    });
   }
 }
 
 function stopDictation() {
+  dictationStartNonce += 1;
   if (!mediaRecorder || mediaRecorder.state !== "recording") {
     isRecording = false;
     updateDictateButton();
@@ -358,6 +495,7 @@ function stopDictation() {
 }
 
 function abortDictation() {
+  dictationStartNonce += 1;
   recordingAborted = true;
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
@@ -367,6 +505,12 @@ function abortDictation() {
     stopAndReleaseStream();
     setBusy(false);
     setPreparingSpinner(false);
+  }
+}
+
+function handleWidgetVisibilityChange() {
+  if (document.hidden && (isRecording || activeStream || (mediaRecorder && mediaRecorder.state === "recording"))) {
+    abortDictation();
   }
 }
 
@@ -382,13 +526,31 @@ async function openSettings() {
   }
 }
 
-async function loadQuickMode() {
+async function loadQuickMode(force = false) {
+  const now = Date.now();
+  if (!force && quickModeLoadedAt > 0 && now - quickModeLoadedAt < QUICK_MODE_CACHE_MS) {
+    return quickMode;
+  }
   try {
     const settings = await invoke("get_prompt_settings");
     quickMode = normalizeMode(settings?.quickMode);
   } catch (_) {
     quickMode = "simple";
   }
+  quickModeLoadedAt = now;
+  return quickMode;
+}
+
+async function loadUiLanguagePreference() {
+  try {
+    const settings = await invoke("get_ui_settings");
+    uiLanguagePreference = String(settings?.uiLanguagePreference || "system");
+  } catch (_) {
+    uiLanguagePreference = "system";
+  }
+  setLanguagePreference(uiLanguagePreference);
+  applyTranslations(document);
+  applyWidgetDynamicTranslations();
 }
 
 async function closeQuick() {
@@ -445,9 +607,11 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+document.addEventListener("visibilitychange", handleWidgetVisibilityChange);
 window.addEventListener("beforeunload", stopAndReleaseStream);
 
 async function bootstrap() {
+  await loadUiLanguagePreference();
   await loadQuickMode();
   renderLucideIcons();
   stopRecordingVisualizer();
@@ -457,6 +621,13 @@ async function bootstrap() {
   syncQuickWindowLayout(true);
 
   try {
+    await listen("ui-language-changed", (event) => {
+      const nextPreference = String(event?.payload?.uiLanguagePreference || "system");
+      uiLanguagePreference = nextPreference;
+      setLanguagePreference(uiLanguagePreference);
+      applyTranslations(document);
+      applyWidgetDynamicTranslations();
+    });
     await listen("quick-action", (event) => {
       runQuickAction(event?.payload?.action);
     });

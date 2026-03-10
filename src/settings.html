@@ -3,50 +3,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BestText Settings</title>
+    <title data-i18n="settings.title">BestText Settings</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="settings-body">
     <main class="settings-shell">
       <header class="settings-hero">
-        <h1>Settings</h1>
-        <p>Configure your provider once, test it instantly.</p>
+        <h1 data-i18n="settings.hero.title">Settings</h1>
+        <p data-i18n="settings.hero.subtitle">Configure your provider once, test it instantly.</p>
       </header>
 
-      <div id="status" class="settings-status" data-tone="neutral" aria-live="polite" aria-atomic="true">Ready.</div>
+      <div id="status" class="settings-status" data-tone="neutral" aria-live="polite" aria-atomic="true" data-i18n="settings.status.ready">Ready.</div>
 
       <div class="settings-layout">
-        <aside class="settings-nav" role="tablist" aria-label="Settings sections">
-          <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers">Providers</button>
-          <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts">Prompts & Modes</button>
-          <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription">Transcription</button>
+        <aside class="settings-nav" role="tablist" data-i18n-aria-label="settings.nav.aria">
+          <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General</button>
+          <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
+          <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
+          <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription" data-i18n="settings.nav.transcription">Transcription</button>
         </aside>
 
         <section class="settings-content">
+          <section id="view-general" class="settings-view" data-view="general" role="tabpanel" aria-labelledby="nav-general">
+            <div class="settings-card">
+              <h2 data-i18n="settings.general.title">General</h2>
+              <p class="hint" data-i18n="settings.general.hint">Choose the interface language for widget, settings, and main app.</p>
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="ui-language-preference" data-i18n="settings.general.language.label">Interface language</label>
+                  <select id="ui-language-preference">
+                    <option value="system" data-i18n="settings.general.language.system">System</option>
+                    <option value="en" data-i18n="settings.general.language.en">English</option>
+                    <option value="es" data-i18n="settings.general.language.es">Español</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section id="view-providers" class="settings-view is-active" data-view="providers" role="tabpanel" aria-labelledby="nav-providers">
             <div class="settings-grid">
               <aside class="settings-panel providers-panel">
                 <div class="providers-header">
-                  <h2>Saved Providers</h2>
-                  <button type="button" id="new-provider-btn" class="settings-btn-secondary">New provider</button>
+                  <h2 data-i18n="settings.providers.saved.title">Saved Providers</h2>
+                  <button type="button" id="new-provider-btn" class="settings-btn-secondary" data-i18n="settings.providers.new">New provider</button>
                 </div>
-                <p id="providers-summary" class="providers-summary">Loading providers...</p>
+                <p id="providers-summary" class="providers-summary" data-i18n="settings.providers.loading">Loading providers...</p>
                 <ul id="providers-list" class="providers-cards"></ul>
               </aside>
 
               <form id="provider-form" class="settings-card">
-                <h2>Provider Details</h2>
-                <p class="hint">Test first. Save only when the connection is valid.</p>
+                <h2 data-i18n="settings.provider.details.title">Provider Details</h2>
+                <p class="hint" data-i18n="settings.provider.details.hint">Test first. Save only when the connection is valid.</p>
                 <input id="provider-id" type="hidden" />
 
                 <div class="settings-form-grid">
                   <div class="field">
-                    <label for="provider-name">Name</label>
+                    <label for="provider-name" data-i18n="settings.field.name">Name</label>
                     <input id="provider-name" type="text" placeholder="OpenAI" required />
                   </div>
 
                   <div class="field">
-                    <label for="provider-type">Type</label>
+                    <label for="provider-type" data-i18n="settings.field.type">Type</label>
                     <select id="provider-type">
                       <option value="openai">OpenAI</option>
                       <option value="openai-compatible">OpenAI-compatible</option>
@@ -54,22 +72,22 @@
                   </div>
 
                   <div class="field field-full">
-                    <label for="provider-base-url">Base URL</label>
+                    <label for="provider-base-url" data-i18n="settings.field.base_url">Base URL</label>
                     <input id="provider-base-url" type="url" placeholder="https://api.openai.com/v1" required />
                   </div>
 
                   <div class="field">
-                    <label for="provider-improve-model">Improve model</label>
+                    <label for="provider-improve-model" data-i18n="settings.field.improve_model">Improve model</label>
                     <input id="provider-improve-model" type="text" placeholder="gpt-4.1-mini" required />
                   </div>
 
                   <div class="field">
-                    <label for="provider-translate-model">Translate model</label>
+                    <label for="provider-translate-model" data-i18n="settings.field.translate_model">Translate model</label>
                     <input id="provider-translate-model" type="text" placeholder="gpt-4.1-mini" required />
                   </div>
 
                   <div class="field">
-                    <label for="provider-transcribe-model">Transcribe model</label>
+                    <label for="provider-transcribe-model" data-i18n="settings.field.transcribe_model">Transcribe model</label>
                     <input
                       id="provider-transcribe-model"
                       type="text"
@@ -79,21 +97,21 @@
                   </div>
 
                   <div class="field">
-                    <label for="provider-api-key">API key</label>
+                    <label for="provider-api-key" data-i18n="settings.field.api_key">API key</label>
                     <input id="provider-api-key" type="password" placeholder="sk-..." autocomplete="off" />
-                    <small class="field-hint">
+                    <small class="field-hint" data-i18n="settings.field.api_key_hint">
                       Stored locally. Leave unchanged to keep the current key.
                     </small>
                   </div>
                 </div>
 
                 <div class="settings-actions">
-                  <button type="button" id="delete-provider-btn" class="settings-btn-danger">Delete provider</button>
-                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary">Set active</button>
-                  <button type="button" id="test-provider-btn" class="settings-btn-secondary">
+                  <button type="button" id="delete-provider-btn" class="settings-btn-danger" data-i18n="settings.action.delete_provider">Delete provider</button>
+                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.set_active">Set active</button>
+                  <button type="button" id="test-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.test_connection">
                     Test connection (no save)
                   </button>
-                  <button type="submit" class="settings-btn-primary">Save provider</button>
+                  <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
                 </div>
               </form>
             </div>
@@ -101,19 +119,31 @@
 
           <section id="view-prompts" class="settings-view" data-view="prompts" role="tabpanel" aria-labelledby="nav-prompts">
             <form id="prompt-form" class="settings-card">
-              <h2>Prompts & Modes</h2>
-              <p class="hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>
+              <h2 data-i18n="settings.prompts.title">Prompts & Modes</h2>
+              <p class="hint" data-i18n="settings.prompts.hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>
 
-              <h3 class="settings-subtitle">Language conversion</h3>
-              <p class="hint">Configure which languages to convert between. Use <code>{source}</code> and <code>{target}</code> in the translate prompt as placeholders.</p>
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.language_conversion">Language conversion</h3>
+              <p class="hint" data-i18n="settings.prompts.language_hint">Configure which languages to convert between. Use {source} and {target} in the translate prompt as placeholders.</p>
               <div class="settings-form-grid">
                 <div class="field">
-                  <label for="source-language">Source language</label>
-                  <input id="source-language" type="text" placeholder="Spanish" list="common-languages" />
+                  <label for="source-language" data-i18n="settings.field.source_language">Source language</label>
+                  <input
+                    id="source-language"
+                    type="text"
+                    data-i18n-placeholder="settings.placeholder.source_language"
+                    placeholder="Spanish"
+                    list="common-languages"
+                  />
                 </div>
                 <div class="field">
-                  <label for="target-language">Target language</label>
-                  <input id="target-language" type="text" placeholder="English" list="common-languages" />
+                  <label for="target-language" data-i18n="settings.field.target_language">Target language</label>
+                  <input
+                    id="target-language"
+                    type="text"
+                    data-i18n-placeholder="settings.placeholder.target_language"
+                    placeholder="English"
+                    list="common-languages"
+                  />
                 </div>
               </div>
               <datalist id="common-languages">
@@ -121,70 +151,72 @@
                 <option value="German"><option value="Italian"><option value="Japanese"><option value="Chinese">
               </datalist>
 
-              <h3 class="settings-subtitle">System prompts</h3>
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.system">System prompts</h3>
               <div class="settings-form-grid">
                 <div class="field field-full">
-                  <label for="prompt-improve-system">Improve system prompt</label>
+                  <label for="prompt-improve-system" data-i18n="settings.field.improve_prompt">Improve system prompt</label>
                   <textarea
                     id="prompt-improve-system"
                     rows="3"
+                    data-i18n-placeholder="settings.placeholder.improve_prompt"
                     placeholder="You are a writing assistant..."
                     required
                   ></textarea>
                 </div>
 
                 <div class="field field-full">
-                  <label for="prompt-translate-system">Translate system prompt</label>
+                  <label for="prompt-translate-system" data-i18n="settings.field.translate_prompt">Translate system prompt</label>
                   <textarea
                     id="prompt-translate-system"
                     rows="3"
+                    data-i18n-placeholder="settings.placeholder.translate_prompt"
                     placeholder="Use {source} and {target} as placeholders..."
                     required
                   ></textarea>
                 </div>
               </div>
 
-              <h3 class="settings-subtitle">Writing modes</h3>
-              <p class="hint">Each mode has a name, description, and optional emoji used in the widget. Keep it simple—a few clearly defined modes work best.</p>
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.writing_modes">Writing modes</h3>
+              <p class="hint" data-i18n="settings.prompts.writing_modes_hint">Each mode has a name, description, and optional emoji used in the widget. Keep it simple: a few clearly defined modes work best.</p>
 
               <div class="writing-modes-grid">
                 <div class="writing-mode-row">
                   <span class="writing-mode-emoji" aria-hidden="true">✍️</span>
                   <div class="field">
-                    <label for="mode-simple">Writing</label>
-                    <input id="mode-simple" type="text" placeholder="Use clear, concise wording..." required />
+                    <label for="mode-simple" data-i18n="settings.mode.simple.label">Writing</label>
+                    <input id="mode-simple" type="text" data-i18n-placeholder="settings.mode.simple.placeholder" placeholder="Use clear, concise wording..." required />
                   </div>
                 </div>
                 <div class="writing-mode-row">
                   <span class="writing-mode-emoji" aria-hidden="true">🧑‍💻</span>
                   <div class="field">
-                    <label for="mode-professional">Developer</label>
-                    <input id="mode-professional" type="text" placeholder="Polished workplace tone..." required />
+                    <label for="mode-professional" data-i18n="settings.mode.professional.label">Developer</label>
+                    <input id="mode-professional" type="text" data-i18n-placeholder="settings.mode.professional.placeholder" placeholder="Polished workplace tone..." required />
                   </div>
                 </div>
                 <div class="writing-mode-row">
                   <span class="writing-mode-emoji" aria-hidden="true">📢</span>
                   <div class="field">
-                    <label for="mode-friendly">Marketing</label>
-                    <input id="mode-friendly" type="text" placeholder="Warm, approachable tone..." required />
+                    <label for="mode-friendly" data-i18n="settings.mode.friendly.label">Marketing</label>
+                    <input id="mode-friendly" type="text" data-i18n-placeholder="settings.mode.friendly.placeholder" placeholder="Warm, approachable tone..." required />
                   </div>
                 </div>
                 <div class="writing-mode-row">
                   <span class="writing-mode-emoji" aria-hidden="true">💬</span>
                   <div class="field">
-                    <label for="mode-casual">Casual</label>
-                    <input id="mode-casual" type="text" placeholder="Relaxed conversational tone..." required />
+                    <label for="mode-casual" data-i18n="settings.mode.casual.label">Casual</label>
+                    <input id="mode-casual" type="text" data-i18n-placeholder="settings.mode.casual.placeholder" placeholder="Relaxed conversational tone..." required />
                   </div>
                 </div>
                 <div class="writing-mode-row">
                   <span class="writing-mode-emoji" aria-hidden="true">🧠</span>
                   <div class="field">
-                    <label for="mode-formal">Thinking / Analysis</label>
-                    <input id="mode-formal" type="text" placeholder="Formal, respectful tone..." required />
+                    <label for="mode-formal" data-i18n="settings.mode.formal.label">Thinking / Analysis</label>
+                    <input id="mode-formal" type="text" data-i18n-placeholder="settings.mode.formal.placeholder" placeholder="Formal, respectful tone..." required />
                   </div>
                 </div>
                 <div class="field writing-mode-default">
-                  <label for="quick-default-mode">Widget default mode</label>
+                  <label for="quick-default-mode" data-i18n="settings.quick_mode.label">Widget default mode</label>
                   <select id="quick-default-mode">
                     <option value="simple">✍️ Writing</option>
                     <option value="professional">🧑‍💻 Developer</option>
@@ -196,48 +228,51 @@
               </div>
 
               <div class="settings-actions">
-                <button type="button" id="reset-prompt-btn" class="settings-btn-secondary">Reset defaults</button>
-                <button type="submit" class="settings-btn-primary">Save prompts & modes</button>
+                <button type="button" id="reset-prompt-btn" class="settings-btn-secondary" data-i18n="settings.action.reset_defaults">Reset defaults</button>
+                <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_prompts">Save prompts & modes</button>
               </div>
             </form>
           </section>
 
           <section id="view-transcription" class="settings-view" data-view="transcription" role="tabpanel" aria-labelledby="nav-transcription">
             <div class="settings-card">
-              <h2>Transcription</h2>
-              <p class="hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
+              <h2 data-i18n="settings.transcription.title">Transcription</h2>
+              <p class="hint" data-i18n="settings.transcription.hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
 
               <div class="settings-form-grid">
                 <div class="field field-full">
-                  <label for="transcription-mode">Mode</label>
+                  <label for="transcription-mode" data-i18n="settings.transcription.mode">Mode</label>
                   <select id="transcription-mode">
-                    <option value="api">API (provider)</option>
-                    <option value="local">Local (Whisper)</option>
+                    <option value="api" data-i18n="settings.transcription.mode.api">API (provider)</option>
+                    <option value="local" data-i18n="settings.transcription.mode.local">Local (Whisper)</option>
                   </select>
                 </div>
               </div>
 
               <div id="transcription-local-section" class="transcription-local-section" hidden>
-                <h3 class="settings-subtitle">Local model</h3>
-                <p class="hint">Download a model below or select an existing .bin file. Models are from <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.</p>
+                <h3 class="settings-subtitle" data-i18n="settings.transcription.local_model">Local model</h3>
+                <p class="hint">
+                  <span data-i18n="settings.transcription.local_hint">Download a model below or select an existing .bin file. Models are from ggerganov/whisper.cpp.</span>
+                  <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.
+                </p>
 
                 <div class="whisper-models-list">
-                  <p class="field-label">Download model</p>
+                  <p class="field-label" data-i18n="settings.transcription.download">Download model</p>
                   <div id="whisper-models-container" class="whisper-models-container"></div>
                 </div>
 
                 <div class="field field-full" style="margin-top: 14px;">
-                  <label for="local-model-path">Model path</label>
+                  <label for="local-model-path" data-i18n="settings.transcription.model_path">Model path</label>
                   <div class="field-with-button">
-                    <input id="local-model-path" type="text" placeholder="No model selected" readonly />
-                    <button type="button" id="pick-model-btn" class="settings-btn-secondary">Select file...</button>
+                    <input id="local-model-path" type="text" data-i18n-placeholder="settings.transcription.no_model" placeholder="No model selected" readonly />
+                    <button type="button" id="pick-model-btn" class="settings-btn-secondary" data-i18n="settings.transcription.select_file">Select file...</button>
                   </div>
-                  <small class="field-hint">Path to a .bin Whisper model (e.g. ggml-tiny.bin, ggml-base.bin)</small>
+                  <small class="field-hint" data-i18n="settings.transcription.path_hint">Path to a .bin Whisper model (e.g. ggml-tiny.bin, ggml-base.bin)</small>
                 </div>
               </div>
 
               <div class="settings-actions" style="margin-top: 16px;">
-                <button type="button" id="save-transcription-btn" class="settings-btn-primary">Save</button>
+                <button type="button" id="save-transcription-btn" class="settings-btn-primary" data-i18n="settings.action.save">Save</button>
               </div>
             </div>
           </section>
@@ -246,6 +281,7 @@
     </main>
 
     <script src="./vendor/lucide.min.js"></script>
+    <script src="./i18n.js"></script>
     <script src="./settings.js"></script>
   </body>
 </html>
