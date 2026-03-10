@@ -68,53 +68,15 @@ npm run tauri build
 ### Core flow
 
 1. Open a text field in any app
-2. Trigger WhisloAI popover/anchor
+2. Open the WhisloAI widget (from app button or configured hotkey)
 3. Choose `Improve selection` or `Translate selection`
 4. Insert output back into your active text field
 
-### macOS right-click action (phase 1)
+### Widget workflow
 
-Use a macOS Quick Action to send selected text to WhisloAI.
-
-1. Open Automator and create a new `Quick Action`
-2. Set:
-   - `Workflow receives current`: `text`
-   - `in`: `any application`
-3. Add action `Run Shell Script`
-4. Set:
-   - `Shell`: `/bin/zsh`
-   - `Pass input`: `as arguments`
-5. Script body:
-
-```bash
-<absolute-path-to-repo>/scripts/macos-context-action.sh "$1"
-```
-
-6. Save it as `Improve English with WhisloAI`
-
-### Windows context action (phase 1)
-
-Current implementation uses an AutoHotkey helper.
-
-- Trigger: `Shift + Right Click` on selected text
-- Installs helper scripts that copy selection and open WhisloAI in `Improve`
-
-Install:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-context-action.ps1
-```
-
-Uninstall:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-context-action.ps1
-```
-
-Notes:
-
-- Requires AutoHotkey v2
-- Optional env var: `WHISLOAI_EXE` for custom executable path
+- Keep the widget open while writing
+- Use quick actions to improve/translate selected text
+- Configure provider, languages, and writing modes from `Settings`
 
 ## Privacy and Security
 
@@ -125,14 +87,6 @@ Notes:
 ## Project Status
 
 WhisloAI is an active MVP and moving toward a broader open source release.
-
-Not implemented yet:
-
-- Native Windows shell extension context menu (phase 1 currently uses AutoHotkey)
-
-## Documentation
-
-- Product spec (Spanish): [`docs/especificacion-funcional-mvp.md`](./docs/especificacion-funcional-mvp.md)
 
 ## Contributing
 
