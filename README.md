@@ -63,6 +63,30 @@ npm run build
 npm run tauri build
 ```
 
+## Download Prebuilt App
+
+You can download ready-to-run binaries from the GitHub Releases page:
+
+- https://github.com/Canopix/WhisloAI/releases
+
+No local compilation is required for testers.
+
+## Publish a Release (Maintainers)
+
+1. Update version values:
+   - `package.json`
+   - `src-tauri/Cargo.toml`
+   - `src-tauri/tauri.conf.json`
+2. Commit and push your changes.
+3. Create and push a release tag:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+4. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS, Windows, and Linux, then attaches them to a GitHub Release.
+
 ## Usage
 
 ### Core flow
