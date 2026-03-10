@@ -293,6 +293,97 @@ body {
   color: #355153;
 }
 
+.settings-card code {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: #e8f0ed;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #1b5f57;
+}
+
+.writing-modes-grid {
+  display: grid;
+  gap: 10px 12px;
+  margin-top: 12px;
+}
+
+.writing-mode-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.writing-mode-emoji {
+  font-size: 20px;
+  line-height: 1;
+  padding-top: 28px;
+}
+
+.writing-mode-default {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #d8e5e1;
+}
+
+.transcription-local-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #d8e5e1;
+}
+
+.whisper-models-list {
+  margin-top: 10px;
+}
+
+.field-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334649;
+}
+
+.whisper-models-container {
+  display: grid;
+  gap: 8px;
+}
+
+.whisper-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #c9dcd5;
+  border-radius: 10px;
+  background: #f9fcfb;
+}
+
+.whisper-model-row .model-info {
+  flex: 1;
+  font-size: 13px;
+}
+
+.whisper-model-row .model-size {
+  font-size: 11px;
+  color: #5f6f72;
+}
+
+.whisper-model-row button:disabled {
+  opacity: 0.6;
+}
+
+.field-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-with-button input {
+  flex: 1;
+}
+
 .settings-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -533,14 +624,15 @@ body {
   width: 100vw;
   height: 100vh;
   background: transparent;
-  border-radius: 999px;
+  border-radius: 50%;
   overflow: hidden;
+  clip-path: circle(50% at 50% 50%);
 }
 
 .anchor-btn {
   width: 100%;
   height: 100%;
-  border-radius: 999px;
+  border-radius: 50%;
   border: 1px solid rgba(165, 218, 203, 0.85);
   background:
     radial-gradient(circle at 30% 24%, rgba(85, 231, 195, 0.9), rgba(85, 231, 195, 0) 44%),
@@ -555,9 +647,14 @@ body {
     0 6px 14px rgba(15, 118, 110, 0.28);
 }
 
+.anchor-btn svg,
+.anchor-btn img.anchor-btn-icon {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
 .anchor-btn svg {
-  width: 14px;
-  height: 14px;
   stroke: currentColor;
   fill: none;
 }
@@ -604,13 +701,18 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
   background: linear-gradient(150deg, #29aa92 0%, #0f766e 70%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 6px 12px rgba(15, 118, 110, 0.24);
+}
+
+.quick-app-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 button.quick-tool-btn {
@@ -648,6 +750,12 @@ button.quick-tool-btn svg {
   justify-content: center;
 }
 
+.quick-tool-icon[hidden],
+.quick-dictate-spinner[hidden],
+.quick-dictate-wave-wrap[hidden] {
+  display: none;
+}
+
 button.quick-tool-btn:hover {
   border-color: #98c7bb;
   color: #0f766e;
@@ -656,13 +764,38 @@ button.quick-tool-btn:hover {
 }
 
 button.quick-tool-btn.is-recording {
-  border-color: #e4b2b2;
-  color: #b91c1c;
-  background: #fff5f5;
+  border-color: #98c7bb;
+  color: #0f766e;
+  background: linear-gradient(135deg, #f0fdf9 0%, #ecfbf7 100%);
+}
+
+button.quick-close-btn {
+  margin-left: auto;
+}
+
+button.quick-close-btn:hover {
+  border-color: #98c7bb;
+  color: #0f766e;
+  background: #f0fdf9;
 }
 
 .quick-shell.is-busy .quick-toolbar {
   filter: saturate(0.9);
+}
+
+.quick-dictate-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cfe2dd;
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: quick-spin 0.7s linear infinite;
+}
+
+@keyframes quick-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .quick-toolbar.is-recording .quick-app-pill,
@@ -676,69 +809,79 @@ button.quick-tool-btn.is-recording {
   border-width: 0;
   pointer-events: none;
   overflow: hidden;
+  min-width: 0;
+}
+
+.quick-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: #dc2626;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.quick-stop-btn:hover {
+  background: #b91c1c;
+}
+
+.quick-stop-square {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.quick-toolbar.is-recording #quick-close-btn {
+  opacity: 0.8;
+  color: #dc2626;
 }
 
 .quick-toolbar.is-recording #quick-dictate-btn {
   flex: 1;
+  min-width: 0;
   width: auto;
-  border-radius: 12px;
-  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   justify-content: flex-start;
   gap: 8px;
+  box-shadow: none;
+}
+
+.quick-toolbar.is-recording #quick-dictate-btn:hover {
+  transform: none;
+  background: transparent;
 }
 
 .quick-dictate-wave-wrap {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+}
+
+.quick-dictate-wave-wrap .quick-recording-waveform {
+  min-width: 0;
+  flex: 1;
+  display: flex;
 }
 
 .quick-recording-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  background: #dc2626;
-  animation: recording-pulse 0.95s ease-in-out infinite;
-}
-
-.quick-status {
-  margin: 0;
-  border: 1px solid #dde9e5;
-  border-radius: 9px;
-  padding: 6px 8px;
-  font-size: 11px;
-  color: #33504d;
-  background: rgba(255, 255, 255, 0.74);
-}
-
-.quick-status[hidden] {
-  display: none;
-}
-
-.quick-status[data-state="loading"] {
-  border-color: #c8d6f5;
-  color: #1e40af;
-  background: #eef4ff;
-}
-
-.quick-status[data-state="success"] {
-  border-color: #b7e3cb;
-  color: #166534;
-  background: #ebf9f1;
-}
-
-.quick-status[data-state="warning"] {
-  border-color: #f8d4ad;
-  color: #9a3412;
-  background: #fff2e5;
-}
-
-.quick-status[data-state="error"] {
-  border-color: #f4c5c5;
-  color: #991b1b;
-  background: #fef2f2;
+  background: #0f766e;
+  flex-shrink: 0;
 }
 
 label {
@@ -830,11 +973,10 @@ button.audio-control {
 }
 
 .recording-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  background: #dc2626;
-  animation: recording-pulse 0.95s ease-in-out infinite;
+  background: #0f766e;
 }
 
 .recording-waveform,
@@ -862,18 +1004,6 @@ button.audio-control {
 .quick-recording-waveform.is-fallback .wave-bar {
   animation: wave-bounce 0.85s ease-in-out infinite;
   animation-delay: var(--wave-delay, 0s);
-}
-
-@keyframes recording-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(0.84);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 @keyframes wave-bounce {

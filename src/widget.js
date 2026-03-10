@@ -7,9 +7,10 @@ const translateSelectionBtn = document.getElementById("quick-translate-selection
 const improveSelectionBtn = document.getElementById("quick-improve-selection-btn");
 const dictateBtn = document.getElementById("quick-dictate-btn");
 const dictateIconEl = document.getElementById("quick-dictate-icon");
+const dictateSpinnerEl = document.getElementById("quick-dictate-spinner");
 const quickDictateWaveWrapEl = document.getElementById("quick-dictate-wave-wrap");
 const settingsBtn = document.getElementById("quick-settings-btn");
-const statusEl = document.getElementById("quick-status");
+const closeBtn = document.getElementById("quick-close-btn");
 const quickRecordingWaveformEl = document.getElementById("quick-recording-waveform");
 
 let mediaRecorder = null;
@@ -24,13 +25,10 @@ let recordingFrameHandle = null;
 let recordingBars = [];
 let lastExpandedState = null;
 let quickMode = "simple";
+let recordingAborted = false;
 
 const QUICK_WAVE_BAR_COUNT = 20;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
-
-function formatError(error) {
-  return typeof specErrorFor === "function" ? specErrorFor(error) : String(error || "").replace(/^Error: /, "");
-}
 
 function normalizeMode(mode) {
   const value = String(mode || "")
@@ -57,39 +55,29 @@ function setDictateGlyph(icon) {
   renderLucideIcons();
 }
 
-function isMacOS() {
-  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-  return /mac/i.test(platform);
-}
-
-function pasteHint() {
-  return `${isMacOS() ? "Cmd" : "Ctrl"} + V`;
-}
-
-function syncQuickWindowLayout(force = false) {
-  const expanded = !statusEl.hidden;
-  if (!force && expanded === lastExpandedState) {
+function syncQuickWindowLayout(force = false, expanded = true) {
+  if (!force && lastExpandedState === expanded) {
     return;
   }
   lastExpandedState = expanded;
-  invoke("set_quick_window_expanded", { expanded }).catch(() => {
-    // ignore resize failures
-  });
+  invoke("set_quick_window_expanded", { expanded }).catch(() => {});
 }
 
-function setStatus(message, state = "neutral") {
-  statusEl.textContent = message;
-  statusEl.dataset.state = state;
-
-  const visible = state === "loading" || state === "success" || state === "error" || state === "warning";
-  statusEl.hidden = !visible;
-  syncQuickWindowLayout();
+function setCloseIcon(icon) {
+  const i = closeBtn.querySelector("i.icon-lucide");
+  if (i) i.setAttribute("data-lucide", icon);
+  renderLucideIcons();
 }
 
 function setRecordingVisualizerVisible(visible) {
-  quickDictateWaveWrapEl.hidden = !visible;
+  if (dictateSpinnerEl) dictateSpinnerEl.hidden = true;
+  if (dictateIconEl) dictateIconEl.hidden = visible;
+  if (quickDictateWaveWrapEl) quickDictateWaveWrapEl.hidden = !visible;
+  setCloseIcon(visible ? "trash-2" : "x");
+  closeBtn.title = visible ? "Discard recording" : "Close widget (Escape)";
+  closeBtn.setAttribute("aria-label", visible ? "Discard recording" : "Close widget");
   quickToolbar.classList.toggle("is-recording", visible);
-  syncQuickWindowLayout();
+  syncQuickWindowLayout(true, visible);
 }
 
 function ensureRecordingBars() {
@@ -131,7 +119,7 @@ function stopRecordingVisualizer() {
     recordingAudioContext = null;
   }
 
-  quickRecordingWaveformEl.classList.remove("is-fallback");
+  if (quickRecordingWaveformEl) quickRecordingWaveformEl.classList.remove("is-fallback");
   resetRecordingBars();
   setRecordingVisualizerVisible(false);
 }
@@ -199,11 +187,16 @@ function setBusy(busy) {
   dictateBtn.disabled = busy && !isRecording;
 }
 
+function setPreparingSpinner(visible) {
+  if (dictateIconEl) dictateIconEl.hidden = visible;
+  if (dictateSpinnerEl) dictateSpinnerEl.hidden = !visible;
+}
+
 function updateDictateButton() {
-  setDictateGlyph(isRecording ? "square" : "mic");
+  setDictateGlyph(isRecording ? "circle-stop" : "mic");
   dictateBtn.classList.toggle("is-recording", isRecording);
-  dictateBtn.setAttribute("aria-label", isRecording ? "Stop dictation" : "Start dictation");
-  dictateBtn.title = isRecording ? "Stop dictation" : "Start dictation";
+  dictateBtn.setAttribute("aria-label", isRecording ? "Stop dictation" : "Start dictation — Record speech, transcribe, then translate");
+  dictateBtn.title = isRecording ? "Stop dictation" : "Start dictation — Record speech, transcribe, then translate";
   dictateBtn.disabled = isBusy && !isRecording;
 }
 
@@ -234,15 +227,12 @@ function stopAndReleaseStream() {
 
 async function insertResultText(output) {
   const result = await invoke("auto_insert_text", { text: output });
-  if (result && result.pasted) {
-    setStatus("Inserted in the active field.", "success");
-  } else {
+  if (!result || !result.pasted) {
     try {
       await invoke("open_quick_window");
     } catch (_) {
       // ignore
     }
-    setStatus(`No pudimos pegar automáticamente. El texto quedó copiado. Pegá con ${pasteHint()}.`, "warning");
   }
 }
 
@@ -253,7 +243,6 @@ async function runSelectionAction(mode) {
 
   await loadQuickMode();
   setBusy(true);
-  setStatus("Capturing selected text...", "loading");
 
   try {
     const input = await invoke("capture_selected_text");
@@ -261,21 +250,18 @@ async function runSelectionAction(mode) {
       throw new Error("No selected text detected");
     }
 
-    setStatus(mode === "improve" ? "Improving selected text..." : "Translating selected text...", "loading");
     const output =
       mode === "improve"
         ? await invoke("improve_text", { input, style: quickMode })
         : await invoke("translate_text", { input, style: quickMode });
 
     await insertResultText(output);
-    setStatus("Ready.", "neutral");
   } catch (error) {
     try {
       await invoke("open_quick_window");
     } catch (_) {
       // ignore
     }
-    setStatus(formatError(error), "error");
   } finally {
     setBusy(false);
     updateDictateButton();
@@ -289,7 +275,7 @@ async function startDictation() {
 
   try {
     setBusy(true);
-    setStatus("Preparing microphone...", "loading");
+    setPreparingSpinner(true);
 
     activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(activeStream);
@@ -299,7 +285,6 @@ async function startDictation() {
     isRecording = true;
     setBusy(false);
     updateDictateButton();
-    setStatus("Recording...", "loading");
 
     mediaRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
@@ -307,27 +292,30 @@ async function startDictation() {
       }
     };
 
-    mediaRecorder.onerror = () => {
-      setStatus(formatError("Recording failed"), "error");
-    };
+    mediaRecorder.onerror = () => {};
 
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      const aborted = recordingAborted;
+      recordingAborted = false;
+
+      const mimeType = mediaRecorder.mimeType || "audio/webm";
+      const blob = aborted ? null : new Blob(recordedChunks, { type: mimeType });
       recordedChunks = [];
       mediaRecorder = null;
       stopAndReleaseStream();
       isRecording = false;
       updateDictateButton();
 
-      if (!blob.size) {
-        setStatus(formatError("No audio captured"), "error");
+      if (aborted || !blob || !blob.size) {
+        setBusy(false);
+        setPreparingSpinner(false);
         return;
       }
 
       setBusy(true);
-      updateDictateButton();
+      setPreparingSpinner(true);
+
       try {
-        setStatus("Transcribing...", "loading");
         const audioBase64 = await blobToBase64(blob);
         const transcript = await invoke("transcribe_audio", {
           audioBase64,
@@ -335,18 +323,17 @@ async function startDictation() {
         });
 
         await loadQuickMode();
-        setStatus("Translating transcript...", "loading");
         const output = await invoke("translate_text", {
           input: transcript,
           style: quickMode,
         });
 
         await insertResultText(output);
-        setStatus("Ready.", "neutral");
       } catch (error) {
-        setStatus(formatError(error), "error");
+        // silent
       } finally {
         setBusy(false);
+        setPreparingSpinner(false);
         updateDictateButton();
       }
     };
@@ -357,7 +344,6 @@ async function startDictation() {
     updateDictateButton();
     stopAndReleaseStream();
     setBusy(false);
-    setStatus(formatError(error), "error");
   }
 }
 
@@ -366,11 +352,22 @@ function stopDictation() {
     isRecording = false;
     updateDictateButton();
     stopAndReleaseStream();
-    setStatus("Ready.", "neutral");
     return;
   }
-    setStatus("Stopping...", "loading");
   mediaRecorder.stop();
+}
+
+function abortDictation() {
+  recordingAborted = true;
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  } else {
+    isRecording = false;
+    updateDictateButton();
+    stopAndReleaseStream();
+    setBusy(false);
+    setPreparingSpinner(false);
+  }
 }
 
 async function openSettings() {
@@ -381,7 +378,7 @@ async function openSettings() {
     await invoke("open_settings_window");
     await invoke("close_quick_window");
   } catch (error) {
-    setStatus(formatError(error), "error");
+    // silent
   }
 }
 
@@ -396,7 +393,7 @@ async function loadQuickMode() {
 
 async function closeQuick() {
   if (isRecording) {
-    stopDictation();
+    abortDictation();
   }
   try {
     await invoke("close_quick_window");
@@ -422,7 +419,6 @@ function runQuickAction(action) {
     return;
   }
   if (action === "open-app") {
-    setStatus("Ready.", "neutral");
     improveSelectionBtn.focus();
   }
 }
@@ -430,13 +426,18 @@ function runQuickAction(action) {
 translateSelectionBtn.addEventListener("click", () => runSelectionAction("translate"));
 improveSelectionBtn.addEventListener("click", () => runSelectionAction("improve"));
 dictateBtn.addEventListener("click", () => {
-  if (isRecording) {
+  if (isRecording) stopDictation();
+  else startDictation();
+});
+document.addEventListener("click", (event) => {
+  const stop = event.target.closest("#quick-stop-btn");
+  if (stop) {
+    event.stopPropagation();
     stopDictation();
-  } else {
-    startDictation();
   }
 });
 settingsBtn.addEventListener("click", openSettings);
+closeBtn.addEventListener("click", closeQuick);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -450,9 +451,9 @@ async function bootstrap() {
   await loadQuickMode();
   renderLucideIcons();
   stopRecordingVisualizer();
+  if (quickDictateWaveWrapEl) quickDictateWaveWrapEl.hidden = true;
   setBusy(false);
   updateDictateButton();
-  setStatus("Ready.", "neutral");
   syncQuickWindowLayout(true);
 
   try {

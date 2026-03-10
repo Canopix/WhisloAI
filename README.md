@@ -10,6 +10,10 @@ Minimal Tauri desktop app focused on:
 - Plain HTML/CSS/JavaScript frontend (no React/Vue)
 - Secure API key storage via OS keychain (`keyring` crate)
 
+## Build requirements
+
+- **cmake** – required for local Whisper transcription. On macOS: `brew install cmake`
+
 ## Run
 
 ```bash

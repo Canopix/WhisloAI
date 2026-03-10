@@ -9,14 +9,16 @@
   <body class="quick-body">
     <main id="quick-shell" class="quick-shell">
       <div class="quick-toolbar" role="toolbar" aria-label="Quick actions">
-        <span class="quick-app-pill" aria-hidden="true">B</span>
+        <span class="quick-app-pill" aria-hidden="true">
+          <img src="./anchor-icon.png" alt="BestText" width="18" height="18" class="quick-app-icon" />
+        </span>
 
         <button
           id="quick-improve-selection-btn"
           type="button"
           class="quick-tool-btn"
-          aria-label="Improve selected text"
-          title="Improve selected text"
+          aria-label="Improve selected text using the selected writing mode"
+          title="Improve selected text — Rewrite in the selected writing style"
         >
           <i class="icon-lucide" data-lucide="wand-2" aria-hidden="true"></i>
         </button>
@@ -25,8 +27,8 @@
           id="quick-translate-selection-btn"
           type="button"
           class="quick-tool-btn"
-          aria-label="Translate selected text"
-          title="Translate selected text"
+          aria-label="Translate selected text from source to target language"
+          title="Translate selected text — Convert using the selected writing mode"
         >
           <i class="icon-lucide" data-lucide="languages" aria-hidden="true"></i>
         </button>
@@ -35,13 +37,17 @@
           id="quick-dictate-btn"
           type="button"
           class="quick-tool-btn"
-          aria-label="Start dictation"
-          title="Start dictation"
+          aria-label="Start dictation to record and transcribe speech"
+          title="Start dictation — Record speech, transcribe, then translate"
         >
           <span id="quick-dictate-icon" class="quick-tool-icon" aria-hidden="true">
             <i id="quick-dictate-icon-glyph" class="icon-lucide" data-lucide="mic" aria-hidden="true"></i>
           </span>
+          <span id="quick-dictate-spinner" class="quick-dictate-spinner" hidden aria-hidden="true"></span>
           <span id="quick-dictate-wave-wrap" class="quick-dictate-wave-wrap" hidden>
+            <span id="quick-stop-btn" class="quick-stop-btn" role="button" tabindex="0" aria-label="Stop recording" title="Stop recording">
+              <span class="quick-stop-square"></span>
+            </span>
             <span class="quick-recording-dot" aria-hidden="true"></span>
             <span id="quick-recording-waveform" class="quick-recording-waveform" aria-hidden="true"></span>
           </span>
@@ -51,16 +57,22 @@
           id="quick-settings-btn"
           type="button"
           class="quick-tool-btn"
-          aria-label="Open settings"
-          title="Open settings"
+          aria-label="Open settings to configure provider and languages"
+          title="Open settings — Configure provider, languages, and writing modes"
         >
           <i class="icon-lucide" data-lucide="settings-2" aria-hidden="true"></i>
         </button>
-      </div>
 
-      <p id="quick-status" class="quick-status" data-state="neutral" aria-live="polite" aria-atomic="true" hidden>
-        Ready.
-      </p>
+        <button
+          id="quick-close-btn"
+          type="button"
+          class="quick-tool-btn quick-close-btn"
+          aria-label="Close widget"
+          title="Close widget (Escape)"
+        >
+          <i class="icon-lucide" data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </div>
     </main>
 
     <script src="./vendor/lucide.min.js"></script>

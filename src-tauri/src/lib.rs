@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::path::BaseDirectory;
 use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -21,8 +22,7 @@ const TRAY_ICON_ID: &str = "besttext-tray";
 const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
 const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
 const TRAY_MENU_QUIT: &str = "tray-quit";
-const SUPPORTED_STYLE_MODES: [&str; 5] =
-    ["simple", "professional", "friendly", "casual", "formal"];
+const SUPPORTED_STYLE_MODES: [&str; 5] = ["simple", "professional", "friendly", "casual", "formal"];
 
 #[derive(Default)]
 struct PendingLaunchText(Mutex<Option<String>>);
@@ -97,6 +97,10 @@ struct PromptSettings {
     improve_system_prompt: String,
     #[serde(default = "default_translate_system_prompt")]
     translate_system_prompt: String,
+    #[serde(default = "default_source_language")]
+    source_language: String,
+    #[serde(default = "default_target_language")]
+    target_language: String,
     #[serde(default = "default_mode_instructions")]
     mode_instructions: HashMap<String, String>,
     #[serde(default = "default_quick_mode")]
@@ -108,8 +112,30 @@ struct PromptSettings {
 struct PromptSettingsInput {
     improve_system_prompt: String,
     translate_system_prompt: String,
+    #[serde(default)]
+    source_language: String,
+    #[serde(default)]
+    target_language: String,
     mode_instructions: HashMap<String, String>,
     quick_mode: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct TranscriptionConfig {
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    local_model_path: Option<String>,
+}
+
+impl Default for TranscriptionConfig {
+    fn default() -> Self {
+        Self {
+            mode: "api".to_string(),
+            local_model_path: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -123,6 +149,8 @@ struct AppConfig {
     providers: Vec<ProviderConfig>,
     #[serde(default = "default_prompt_settings")]
     prompt_settings: PromptSettings,
+    #[serde(default)]
+    transcription: TranscriptionConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,6 +233,7 @@ impl Default for AppConfig {
             onboarding_completed: false,
             providers: vec![default_provider()],
             prompt_settings: default_prompt_settings(),
+            transcription: TranscriptionConfig::default(),
         }
     }
 }
@@ -240,7 +269,15 @@ fn default_improve_system_prompt() -> String {
 }
 
 fn default_translate_system_prompt() -> String {
-    "You are a translation assistant. Convert Spanish text into clear, concise, natural English for workplace chat. Preserve names and technical terms. Return only final text.".to_string()
+    "You are a translation assistant. Convert text from {source} into clear, concise, natural {target} for workplace chat. Preserve names and technical terms. Return only final text.".to_string()
+}
+
+fn default_source_language() -> String {
+    "Spanish".to_string()
+}
+
+fn default_target_language() -> String {
+    "English".to_string()
 }
 
 fn default_quick_mode() -> String {
@@ -250,9 +287,7 @@ fn default_quick_mode() -> String {
 fn default_mode_instruction_for(mode: &str) -> Option<&'static str> {
     match mode {
         "simple" => Some("Use clear, concise wording with everyday vocabulary."),
-        "professional" => {
-            Some("Use a polished workplace tone with direct and confident wording.")
-        }
+        "professional" => Some("Use a polished workplace tone with direct and confident wording."),
         "friendly" => Some("Use a warm, approachable tone while staying concise."),
         "casual" => Some("Use a relaxed conversational tone with natural phrasing."),
         "formal" => Some("Use a formal, respectful tone with complete sentences."),
@@ -274,6 +309,8 @@ fn default_prompt_settings() -> PromptSettings {
     PromptSettings {
         improve_system_prompt: default_improve_system_prompt(),
         translate_system_prompt: default_translate_system_prompt(),
+        source_language: default_source_language(),
+        target_language: default_target_language(),
         mode_instructions: default_mode_instructions(),
         quick_mode: default_quick_mode(),
     }
@@ -313,6 +350,41 @@ fn normalize_prompt_settings(settings: &mut PromptSettings) -> bool {
         let clean = settings.translate_system_prompt.trim().to_string();
         if clean != settings.translate_system_prompt {
             settings.translate_system_prompt = clean;
+            changed = true;
+        }
+        // Migrate old prompts that hardcode languages to use {source} and {target} placeholders
+        if !settings.translate_system_prompt.contains("{source}")
+            || !settings.translate_system_prompt.contains("{target}")
+        {
+            let migrated = settings
+                .translate_system_prompt
+                .replace("Spanish", "{source}")
+                .replace("English", "{target}");
+            if migrated != settings.translate_system_prompt {
+                settings.translate_system_prompt = migrated;
+                changed = true;
+            }
+        }
+    }
+
+    if settings.source_language.trim().is_empty() {
+        settings.source_language = default_source_language();
+        changed = true;
+    } else {
+        let clean = settings.source_language.trim().to_string();
+        if clean != settings.source_language {
+            settings.source_language = clean;
+            changed = true;
+        }
+    }
+
+    if settings.target_language.trim().is_empty() {
+        settings.target_language = default_target_language();
+        changed = true;
+    } else {
+        let clean = settings.target_language.trim().to_string();
+        if clean != settings.target_language {
+            settings.target_language = clean;
             changed = true;
         }
     }
@@ -375,6 +447,25 @@ fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     Ok(config_dir.join("providers.json"))
 }
+
+fn models_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("Could not resolve app config directory: {e}"))?
+        .join("whisper-models");
+    fs::create_dir_all(&dir).map_err(|e| format!("Could not create models directory: {e}"))?;
+    Ok(dir)
+}
+
+const WHISPER_MODELS: &[(&str, &str, &str)] = &[
+    ("tiny", "ggml-tiny.bin", "~75 MB"),
+    ("tiny.en", "ggml-tiny.en.bin", "~75 MB"),
+    ("base", "ggml-base.bin", "~142 MB"),
+    ("base.en", "ggml-base.en.bin", "~142 MB"),
+    ("small", "ggml-small.bin", "~466 MB"),
+    ("small.en", "ggml-small.en.bin", "~466 MB"),
+];
 
 fn load_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
     let path = config_path(app)?;
@@ -977,6 +1068,31 @@ fn parse_transcription_text(raw_body: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+/// Maps common language names to ISO-639-1 codes for the Whisper transcription API.
+fn language_to_iso639(language: &str) -> Option<&'static str> {
+    let normalized = language.trim().to_lowercase();
+    match normalized.as_str() {
+        "spanish" | "español" => Some("es"),
+        "english" | "inglés" => Some("en"),
+        "portuguese" | "português" => Some("pt"),
+        "french" | "français" => Some("fr"),
+        "german" | "deutsch" => Some("de"),
+        "italian" | "italiano" => Some("it"),
+        "japanese" | "日本語" => Some("ja"),
+        "chinese" | "中文" => Some("zh"),
+        "korean" | "한국어" => Some("ko"),
+        "russian" => Some("ru"),
+        "dutch" => Some("nl"),
+        "arabic" => Some("ar"),
+        "hindi" => Some("hi"),
+        "turkish" => Some("tr"),
+        "polish" => Some("pl"),
+        "swedish" => Some("sv"),
+        "catalan" => Some("ca"),
+        _ => None,
+    }
+}
+
 fn audio_file_name(mime_type: Option<&str>) -> String {
     let extension = match mime_type.unwrap_or_default() {
         "audio/webm" | "audio/webm;codecs=opus" => "webm",
@@ -1099,8 +1215,8 @@ fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     tauri::WebviewWindowBuilder::new(app, "anchor", tauri::WebviewUrl::App("anchor.html".into()))
         .title("BestText Anchor")
-        .inner_size(30.0, 30.0)
-        .min_inner_size(30.0, 30.0)
+        .inner_size(36.0, 36.0)
+        .min_inner_size(36.0, 36.0)
         .resizable(false)
         .transparent(true)
         .always_on_top(true)
@@ -1336,7 +1452,7 @@ end try
 
     Some(AnchorPosition {
         x: (x + w - 10).max(8),
-        y: (y + 2).max(8),
+        y: (y - 44).max(8), // Above the input row, not among inline icons (emoji, mic, etc.)
     })
 }
 
@@ -1450,7 +1566,12 @@ fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
             _ => {}
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    let icon = app
+        .path()
+        .resolve("icons/tray-icon.png", BaseDirectory::Resource)
+        .ok()
+        .and_then(|path| tauri::image::Image::from_path(&path).ok());
+    if let Some(icon) = icon.or_else(|| app.default_window_icon().cloned()) {
         tray_builder = tray_builder.icon(icon);
     }
 
@@ -1478,6 +1599,104 @@ fn get_hotkeys(app: tauri::AppHandle) -> Result<HotkeyConfig, String> {
 fn get_prompt_settings(app: tauri::AppHandle) -> Result<PromptSettings, String> {
     let config = load_config(&app)?;
     Ok(config.prompt_settings)
+}
+
+#[tauri::command]
+fn get_transcription_config(app: tauri::AppHandle) -> Result<TranscriptionConfig, String> {
+    let config = load_config(&app)?;
+    Ok(config.transcription)
+}
+
+#[tauri::command]
+fn save_transcription_config(
+    app: tauri::AppHandle,
+    transcription: TranscriptionConfig,
+) -> Result<TranscriptionConfig, String> {
+    let mut config = load_config(&app)?;
+    let mode = transcription.mode.trim().to_lowercase();
+    let valid_mode = matches!(mode.as_str(), "api" | "local");
+    config.transcription = TranscriptionConfig {
+        mode: if valid_mode { mode } else { "api".to_string() },
+        local_model_path: transcription
+            .local_model_path
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| p.trim().to_string()),
+    };
+    save_config(&app, &config)?;
+    Ok(config.transcription)
+}
+
+#[tauri::command]
+fn list_whisper_models() -> Vec<serde_json::Value> {
+    WHISPER_MODELS
+        .iter()
+        .map(|(id, filename, size)| {
+            serde_json::json!({
+                "id": id,
+                "filename": filename,
+                "size": size,
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+async fn download_whisper_model(app: tauri::AppHandle, model_id: String) -> Result<String, String> {
+    let (_, filename, _) = WHISPER_MODELS
+        .iter()
+        .find(|(id, _, _)| *id == model_id)
+        .ok_or_else(|| format!("Unknown model: {model_id}"))?;
+
+    let models_dir = models_dir(&app)?;
+    let dest_path = models_dir.join(*filename);
+
+    if dest_path.exists() {
+        return Ok(dest_path
+            .to_string_lossy()
+            .to_string());
+    }
+
+    let url = format!(
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{filename}"
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Download failed with status {}",
+            response.status().as_u16()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Download failed: {e}"))?;
+
+    fs::write(&dest_path, &bytes).map_err(|e| format!("Could not save model: {e}"))?;
+
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn pick_local_whisper_model(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("Whisper model", &["bin"])
+            .set_title("Select Whisper model (.bin)")
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|e| format!("Dialog failed: {e}"))?;
+    Ok(path.map(|p| p.to_string()))
 }
 
 #[tauri::command]
@@ -1705,9 +1924,21 @@ fn save_prompt_settings(
     prompt_settings: PromptSettingsInput,
 ) -> Result<PromptSettings, String> {
     let mut config = load_config(&app)?;
+    let source = prompt_settings.source_language.trim().to_string();
+    let target = prompt_settings.target_language.trim().to_string();
     let mut next = PromptSettings {
         improve_system_prompt: prompt_settings.improve_system_prompt.trim().to_string(),
         translate_system_prompt: prompt_settings.translate_system_prompt.trim().to_string(),
+        source_language: if source.is_empty() {
+            default_source_language()
+        } else {
+            source
+        },
+        target_language: if target.is_empty() {
+            default_target_language()
+        } else {
+            target
+        },
         mode_instructions: HashMap::new(),
         quick_mode: normalize_mode_name(&prompt_settings.quick_mode),
     };
@@ -2013,6 +2244,100 @@ async fn test_provider_connection_input(
     ))
 }
 
+#[cfg(feature = "local-transcription")]
+fn transcribe_with_local_whisper(
+    model_path: &str,
+    audio_bytes: &[u8],
+    _mime_type: Option<&str>,
+    source_language: &str,
+) -> Result<String, String> {
+    use symphonia::core::audio::Signal;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::probe::Hint;
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+    let audio_copy = audio_bytes.to_vec();
+    let cursor = std::io::Cursor::new(audio_copy);
+    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+    let hint = Hint::new();
+    let mut format = symphonia::default::get_probe()
+        .format(&hint, mss, &Default::default(), &Default::default())
+        .map_err(|e| format!("Could not detect audio format: {e}"))?;
+    let track = format
+        .format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+        .ok_or("No audio track found")?;
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &Default::default())
+        .map_err(|e| format!("Could not create decoder: {e}"))?;
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .unwrap_or(16000) as u32;
+    use symphonia::core::audio::AudioBufferRef;
+    let mut samples: Vec<f32> = Vec::new();
+    while let Ok(packet) = format.format.next_packet() {
+        if let Ok(decoded) = decoder.decode(&packet) {
+            match decoded {
+                AudioBufferRef::F32(buf) => {
+                    for frame in buf.chan(0) {
+                        samples.push(*frame);
+                    }
+                }
+                AudioBufferRef::S16(buf) => {
+                    let s16_samples = buf.chan(0);
+                    let mut floats = vec![0.0f32; s16_samples.len()];
+                    let _ = whisper_rs::convert_integer_to_float_audio(s16_samples, &mut floats);
+                    samples.extend(floats);
+                }
+                _ => {}
+            }
+        }
+    }
+    if samples.is_empty() {
+        return Err("No audio samples decoded.".to_string());
+    }
+    let resampled = if sample_rate != 16000 {
+        let new_len = (samples.len() as u64 * 16000 / sample_rate as u64) as usize;
+        (0..new_len)
+            .map(|i| {
+                let src_idx = (i as f64 * sample_rate as f64 / 16000.0) as usize;
+                samples.get(src_idx).copied().unwrap_or(0.0)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        samples
+    };
+    let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+        .map_err(|e| format!("Could not load Whisper model: {e}"))?;
+    let mut state = ctx.create_state().map_err(|e| format!("Could not create state: {e}"))?;
+    let mut params = FullParams::new(SamplingStrategy::BeamSearch {
+        beam_size: 5,
+        patience: -1.0,
+    });
+    if let Some(iso639) = language_to_iso639(source_language) {
+        params.set_language(Some(iso639));
+    }
+    params.set_print_progress(false);
+    state
+        .full(params, &resampled)
+        .map_err(|e| format!("Transcription failed: {e}"))?;
+    let text: String = state
+        .as_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string();
+    Ok(if text.is_empty() {
+        "".to_string()
+    } else {
+        text
+    })
+}
+
 #[tauri::command]
 async fn transcribe_audio(
     app: tauri::AppHandle,
@@ -2033,6 +2358,29 @@ async fn transcribe_audio(
     }
 
     let config = load_config(&app)?;
+
+    if config.transcription.mode == "local" {
+        if let Some(ref path) = config.transcription.local_model_path {
+            if std::path::Path::new(path).exists() {
+                #[cfg(feature = "local-transcription")]
+                {
+                    let source = config.prompt_settings.source_language.trim();
+                    return transcribe_with_local_whisper(
+                        path,
+                        &audio_bytes,
+                        mime_type.as_deref(),
+                        source,
+                    );
+                }
+                #[cfg(not(feature = "local-transcription"))]
+                {
+                    return Err("Local transcription requires building with the 'local-transcription' feature (cmake needed). Use API mode or rebuild with: cargo build --features local-transcription".to_string());
+                }
+            }
+        }
+        return Err("Local model path not set or file not found. Configure in Settings.".to_string());
+    }
+
     let provider = active_provider(&config)?;
     let api_key = provider_api_key(&provider)?;
     let endpoint = format!(
@@ -2054,9 +2402,15 @@ async fn transcribe_audio(
         .mime_str(mime_for_part)
         .map_err(|e| format!("Invalid audio mime type: {e}"))?;
 
-    let form = reqwest::multipart::Form::new()
+    let mut form = reqwest::multipart::Form::new()
         .text("model", provider.transcribe_model.clone())
         .part("file", file_part);
+
+    // Use source language from settings to improve transcription accuracy and latency
+    let source = config.prompt_settings.source_language.trim();
+    if let Some(iso639) = language_to_iso639(source) {
+        form = form.text("language", iso639.to_string());
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -2092,6 +2446,8 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
         return Err("Nothing to insert.".to_string());
     }
 
+    let previous_clipboard = app.clipboard().read_text().ok();
+
     app.clipboard()
         .write_text(value.to_string())
         .map_err(|e| format!("Could not copy text to clipboard: {e}"))?;
@@ -2104,18 +2460,27 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
     restore_last_external_app(&app);
     thread::sleep(std::time::Duration::from_millis(180));
 
-    match simulate_paste_shortcut() {
-        Ok(()) => Ok(InsertTextResult {
+    let result = match simulate_paste_shortcut() {
+        Ok(()) => InsertTextResult {
             copied: true,
             pasted: true,
             message: "Text copied and pasted in the active app.".to_string(),
-        }),
-        Err(error) => Ok(InsertTextResult {
+        },
+        Err(error) => InsertTextResult {
             copied: true,
             pasted: false,
             message: format!("Automatic paste failed: {error}"),
-        }),
+        },
+    };
+
+    if result.pasted {
+        thread::sleep(std::time::Duration::from_millis(100));
+        if let Some(prev) = previous_clipboard {
+            let _ = app.clipboard().write_text(prev);
+        }
     }
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -2166,14 +2531,18 @@ async fn translate_text(
     let provider = active_provider(&config)?;
     let api_key = provider_api_key(&provider)?;
     let (mode_name, mode_instruction) = mode_instruction_for(&config.prompt_settings, &style);
+    let source = config.prompt_settings.source_language.trim();
+    let target = config.prompt_settings.target_language.trim();
     let system_prompt = config
         .prompt_settings
         .translate_system_prompt
         .trim()
-        .to_string();
+        .replace("{source}", source)
+        .replace("{target}", target);
     let user_prompt = format!(
-        "Mode: {mode_name}\nMode instruction: {mode_instruction}\n\nSpanish text:\n{}",
-        input.trim()
+        "Mode: {mode_name}\nMode instruction: {mode_instruction}\n\n{source} text:\n{}",
+        input.trim(),
+        source = source
     );
 
     run_chat_completion(
@@ -2195,6 +2564,7 @@ fn consume_pending_improve_text(state: tauri::State<'_, PendingLaunchText>) -> O
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(PendingLaunchText::default())
         .manage(PendingQuickAction::default())
         .manage(LastExternalApp::default())
@@ -2262,6 +2632,11 @@ pub fn run() {
             list_providers,
             get_hotkeys,
             get_prompt_settings,
+            get_transcription_config,
+            save_transcription_config,
+            list_whisper_models,
+            download_whisper_model,
+            pick_local_whisper_model,
             get_onboarding_status,
             complete_onboarding,
             open_permission_settings,

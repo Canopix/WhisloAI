@@ -92,7 +92,7 @@
                 />
               </svg>
             </span>
-            <span>Record (Spanish)</span>
+            <span>Record</span>
           </button>
           <button id="stop-audio-btn" type="button" class="secondary audio-control" disabled>
             <span class="btn-icon" aria-hidden="true">
@@ -112,8 +112,8 @@
         </div>
         <p id="recording-state" class="hint">Microphone idle.</p>
 
-        <label for="translate-input">Spanish text</label>
-        <textarea id="translate-input" rows="6" placeholder="Write in Spanish (or paste transcript)..."></textarea>
+        <label for="translate-input">Source language text</label>
+        <textarea id="translate-input" rows="6" placeholder="Write or paste text in the source language (configure in Settings)..."></textarea>
 
         <div class="row">
           <label for="translate-style">Style</label>
@@ -127,13 +127,13 @@
         </div>
 
         <div class="actions">
-          <button id="translate-btn">Translate to English</button>
+          <button id="translate-btn">Translate</button>
           <button id="insert-translate-btn">Insert in cursor</button>
           <button id="copy-translate-btn" class="secondary">Copy output</button>
         </div>
 
         <label for="translate-output">Output</label>
-        <textarea id="translate-output" rows="6" placeholder="English text will appear here..."></textarea>
+        <textarea id="translate-output" rows="6" placeholder="Translated text will appear here..."></textarea>
       </section>
 
       <footer id="status" class="status" data-tone="neutral" aria-live="polite" aria-atomic="true">Ready</footer>

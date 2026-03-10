@@ -19,6 +19,7 @@
         <aside class="settings-nav" role="tablist" aria-label="Settings sections">
           <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers">Providers</button>
           <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts">Prompts & Modes</button>
+          <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription">Transcription</button>
         </aside>
 
         <section class="settings-content">
@@ -103,6 +104,24 @@
               <h2>Prompts & Modes</h2>
               <p class="hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>
 
+              <h3 class="settings-subtitle">Language conversion</h3>
+              <p class="hint">Configure which languages to convert between. Use <code>{source}</code> and <code>{target}</code> in the translate prompt as placeholders.</p>
+              <div class="settings-form-grid">
+                <div class="field">
+                  <label for="source-language">Source language</label>
+                  <input id="source-language" type="text" placeholder="Spanish" list="common-languages" />
+                </div>
+                <div class="field">
+                  <label for="target-language">Target language</label>
+                  <input id="target-language" type="text" placeholder="English" list="common-languages" />
+                </div>
+              </div>
+              <datalist id="common-languages">
+                <option value="Spanish"><option value="English"><option value="Portuguese"><option value="French">
+                <option value="German"><option value="Italian"><option value="Japanese"><option value="Chinese">
+              </datalist>
+
+              <h3 class="settings-subtitle">System prompts</h3>
               <div class="settings-form-grid">
                 <div class="field field-full">
                   <label for="prompt-improve-system">Improve system prompt</label>
@@ -119,48 +138,59 @@
                   <textarea
                     id="prompt-translate-system"
                     rows="3"
-                    placeholder="You are a translation assistant..."
+                    placeholder="Use {source} and {target} as placeholders..."
                     required
                   ></textarea>
                 </div>
               </div>
 
-              <h3 class="settings-subtitle">Mode instructions</h3>
+              <h3 class="settings-subtitle">Writing modes</h3>
+              <p class="hint">Each mode has a name, description, and optional emoji used in the widget. Keep it simple—a few clearly defined modes work best.</p>
 
-              <div class="settings-form-grid">
-                <div class="field">
-                  <label for="mode-simple">Simple</label>
-                  <input id="mode-simple" type="text" required />
+              <div class="writing-modes-grid">
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">✍️</span>
+                  <div class="field">
+                    <label for="mode-simple">Writing</label>
+                    <input id="mode-simple" type="text" placeholder="Use clear, concise wording..." required />
+                  </div>
                 </div>
-
-                <div class="field">
-                  <label for="mode-professional">Professional</label>
-                  <input id="mode-professional" type="text" required />
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">🧑‍💻</span>
+                  <div class="field">
+                    <label for="mode-professional">Developer</label>
+                    <input id="mode-professional" type="text" placeholder="Polished workplace tone..." required />
+                  </div>
                 </div>
-
-                <div class="field">
-                  <label for="mode-friendly">Friendly</label>
-                  <input id="mode-friendly" type="text" required />
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">📢</span>
+                  <div class="field">
+                    <label for="mode-friendly">Marketing</label>
+                    <input id="mode-friendly" type="text" placeholder="Warm, approachable tone..." required />
+                  </div>
                 </div>
-
-                <div class="field">
-                  <label for="mode-casual">Casual</label>
-                  <input id="mode-casual" type="text" required />
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">💬</span>
+                  <div class="field">
+                    <label for="mode-casual">Casual</label>
+                    <input id="mode-casual" type="text" placeholder="Relaxed conversational tone..." required />
+                  </div>
                 </div>
-
-                <div class="field">
-                  <label for="mode-formal">Formal</label>
-                  <input id="mode-formal" type="text" required />
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">🧠</span>
+                  <div class="field">
+                    <label for="mode-formal">Thinking / Analysis</label>
+                    <input id="mode-formal" type="text" placeholder="Formal, respectful tone..." required />
+                  </div>
                 </div>
-
-                <div class="field">
-                  <label for="quick-default-mode">Quick widget default mode</label>
+                <div class="field writing-mode-default">
+                  <label for="quick-default-mode">Widget default mode</label>
                   <select id="quick-default-mode">
-                    <option value="simple">Simple</option>
-                    <option value="professional">Professional</option>
-                    <option value="friendly">Friendly</option>
-                    <option value="casual">Casual</option>
-                    <option value="formal">Formal</option>
+                    <option value="simple">✍️ Writing</option>
+                    <option value="professional">🧑‍💻 Developer</option>
+                    <option value="friendly">📢 Marketing</option>
+                    <option value="casual">💬 Casual</option>
+                    <option value="formal">🧠 Thinking / Analysis</option>
                   </select>
                 </div>
               </div>
@@ -170,6 +200,46 @@
                 <button type="submit" class="settings-btn-primary">Save prompts & modes</button>
               </div>
             </form>
+          </section>
+
+          <section id="view-transcription" class="settings-view" data-view="transcription" role="tabpanel" aria-labelledby="nav-transcription">
+            <div class="settings-card">
+              <h2>Transcription</h2>
+              <p class="hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
+
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="transcription-mode">Mode</label>
+                  <select id="transcription-mode">
+                    <option value="api">API (provider)</option>
+                    <option value="local">Local (Whisper)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="transcription-local-section" class="transcription-local-section" hidden>
+                <h3 class="settings-subtitle">Local model</h3>
+                <p class="hint">Download a model below or select an existing .bin file. Models are from <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.</p>
+
+                <div class="whisper-models-list">
+                  <p class="field-label">Download model</p>
+                  <div id="whisper-models-container" class="whisper-models-container"></div>
+                </div>
+
+                <div class="field field-full" style="margin-top: 14px;">
+                  <label for="local-model-path">Model path</label>
+                  <div class="field-with-button">
+                    <input id="local-model-path" type="text" placeholder="No model selected" readonly />
+                    <button type="button" id="pick-model-btn" class="settings-btn-secondary">Select file...</button>
+                  </div>
+                  <small class="field-hint">Path to a .bin Whisper model (e.g. ggml-tiny.bin, ggml-base.bin)</small>
+                </div>
+              </div>
+
+              <div class="settings-actions" style="margin-top: 16px;">
+                <button type="button" id="save-transcription-btn" class="settings-btn-primary">Save</button>
+              </div>
+            </div>
           </section>
         </section>
       </div>

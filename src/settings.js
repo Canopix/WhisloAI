@@ -27,6 +27,8 @@ const deleteProviderBtn = document.getElementById("delete-provider-btn");
 const promptForm = document.getElementById("prompt-form");
 const promptImproveSystem = document.getElementById("prompt-improve-system");
 const promptTranslateSystem = document.getElementById("prompt-translate-system");
+const sourceLanguage = document.getElementById("source-language");
+const targetLanguage = document.getElementById("target-language");
 const modeSimple = document.getElementById("mode-simple");
 const modeProfessional = document.getElementById("mode-professional");
 const modeFriendly = document.getElementById("mode-friendly");
@@ -35,11 +37,20 @@ const modeFormal = document.getElementById("mode-formal");
 const quickDefaultMode = document.getElementById("quick-default-mode");
 const resetPromptBtn = document.getElementById("reset-prompt-btn");
 
+const transcriptionMode = document.getElementById("transcription-mode");
+const transcriptionLocalSection = document.getElementById("transcription-local-section");
+const localModelPath = document.getElementById("local-model-path");
+const pickModelBtn = document.getElementById("pick-model-btn");
+const saveTranscriptionBtn = document.getElementById("save-transcription-btn");
+const whisperModelsContainer = document.getElementById("whisper-models-container");
+
 const DEFAULT_PROMPT_SETTINGS = {
   improveSystemPrompt:
     "You are a writing assistant. Rewrite text in clear, concise, natural English. Keep intent and facts unchanged. Return only final text.",
   translateSystemPrompt:
-    "You are a translation assistant. Convert Spanish text into clear, concise, natural English for workplace chat. Preserve names and technical terms. Return only final text.",
+    "You are a translation assistant. Convert text from {source} into clear, concise, natural {target} for workplace chat. Preserve names and technical terms. Return only final text.",
+  sourceLanguage: "Spanish",
+  targetLanguage: "English",
   modeInstructions: {
     simple: "Use clear, concise wording with everyday vocabulary.",
     professional: "Use a polished workplace tone with direct and confident wording.",
@@ -360,6 +371,8 @@ function fillPromptForm(settings) {
   promptImproveSystem.value = value.improveSystemPrompt || DEFAULT_PROMPT_SETTINGS.improveSystemPrompt;
   promptTranslateSystem.value =
     value.translateSystemPrompt || DEFAULT_PROMPT_SETTINGS.translateSystemPrompt;
+  sourceLanguage.value = value.sourceLanguage || DEFAULT_PROMPT_SETTINGS.sourceLanguage;
+  targetLanguage.value = value.targetLanguage || DEFAULT_PROMPT_SETTINGS.targetLanguage;
 
   modeSimple.value = modeInstructions.simple || DEFAULT_PROMPT_SETTINGS.modeInstructions.simple;
   modeProfessional.value =
@@ -374,6 +387,8 @@ function buildPromptPayload() {
   return {
     improveSystemPrompt: promptImproveSystem.value.trim(),
     translateSystemPrompt: promptTranslateSystem.value.trim(),
+    sourceLanguage: sourceLanguage.value.trim() || DEFAULT_PROMPT_SETTINGS.sourceLanguage,
+    targetLanguage: targetLanguage.value.trim() || DEFAULT_PROMPT_SETTINGS.targetLanguage,
     modeInstructions: {
       simple: modeSimple.value.trim(),
       professional: modeProfessional.value.trim(),
@@ -430,6 +445,94 @@ resetPromptBtn.addEventListener("click", () => {
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
   setStatus("Prompt defaults restored (not saved yet).", "neutral");
 });
+
+function syncTranscriptionLocalVisibility() {
+  transcriptionLocalSection.hidden = transcriptionMode.value !== "local";
+}
+
+async function loadTranscriptionConfig() {
+  if (!invoke) return;
+  try {
+    const config = await invoke("get_transcription_config");
+    transcriptionMode.value = config.mode || "api";
+    localModelPath.value = config.localModelPath || "";
+    syncTranscriptionLocalVisibility();
+  } catch (_) {
+    transcriptionMode.value = "api";
+    syncTranscriptionLocalVisibility();
+  }
+}
+
+async function renderWhisperModels() {
+  if (!invoke || !whisperModelsContainer) return;
+  try {
+    const models = await invoke("list_whisper_models");
+    whisperModelsContainer.innerHTML = "";
+    for (const m of models) {
+      const row = document.createElement("div");
+      row.className = "whisper-model-row";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "settings-btn-secondary";
+      btn.textContent = "Download";
+      btn.dataset.modelId = m.id;
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        setStatus(`Downloading ${m.id}...`, "loading");
+        try {
+          const path = await invoke("download_whisper_model", { modelId: m.id });
+          localModelPath.value = path;
+          await saveTranscriptionConfig();
+          setStatus(`Downloaded ${m.id}.`, "success");
+        } catch (err) {
+          setStatus(normalizeError(err), "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+      row.innerHTML = `<span class="model-info">${escapeHtml(m.id)} <span class="model-size">${escapeHtml(m.size)}</span></span>`;
+      row.appendChild(btn);
+      whisperModelsContainer.appendChild(row);
+    }
+  } catch (_) {
+    whisperModelsContainer.innerHTML = "<p class=\"hint\">Could not load models list.</p>";
+  }
+}
+
+async function saveTranscriptionConfig() {
+  if (!invoke) return;
+  setStatus("Saving transcription settings...", "loading");
+  try {
+    const path = transcriptionMode.value === "local" ? localModelPath.value.trim() : "";
+    await invoke("save_transcription_config", {
+      transcription: {
+        mode: transcriptionMode.value,
+        localModelPath: path || null,
+      },
+    });
+    setStatus("Transcription settings saved.", "success");
+  } catch (error) {
+    setStatus(normalizeError(error), "error");
+  }
+}
+
+transcriptionMode.addEventListener("change", syncTranscriptionLocalVisibility);
+pickModelBtn.addEventListener("click", async () => {
+  if (!invoke) return;
+  try {
+    const path = await invoke("pick_local_whisper_model");
+    if (path) {
+      localModelPath.value = path;
+      transcriptionMode.value = "local";
+      syncTranscriptionLocalVisibility();
+      await saveTranscriptionConfig();
+    }
+  } catch (error) {
+    setStatus(normalizeError(error), "error");
+  }
+});
+saveTranscriptionBtn.addEventListener("click", saveTranscriptionConfig);
+
 const settingsNav = document.querySelector(".settings-nav");
 if (settingsNav) {
   settingsNav.addEventListener("click", (e) => {
@@ -480,7 +583,7 @@ async function bootstrap() {
     return;
   }
   try {
-    await Promise.all([loadProviders(), loadPromptSettings()]);
+    await Promise.all([loadProviders(), loadPromptSettings(), loadTranscriptionConfig(), renderWhisperModels()]);
     setStatus("Ready.", "neutral");
   } catch (error) {
     setStatus(`Failed to load settings: ${normalizeError(error)}`, "error");

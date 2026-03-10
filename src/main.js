@@ -83,6 +83,7 @@ function switchTab(tabName) {
 function setRecordingState(message, isError = false) {
   recordingStateEl.textContent = message;
   recordingStateEl.style.color = isError ? "#b91c1c" : "";
+  recordingStateEl.hidden = !message;
 }
 
 function setRecordingVisualizerVisible(visible) {
@@ -368,7 +369,7 @@ async function transcribeRecordedBlob(blob) {
 
   isTranscribingAudio = true;
   setRecordingButtons(false);
-  setRecordingState("Transcribing...");
+    setRecordingState("Transcribing…");
   setStatus("Transcribing audio...");
 
   try {
@@ -439,8 +440,8 @@ async function startAudioRecording() {
 
     mediaRecorder.start(250);
     setRecordingButtons(true);
-    setRecordingState("Recording... Click stop when finished.");
-    setStatus("Recording from microphone...");
+    setRecordingState("");
+    setStatus("");
   } catch (error) {
     mediaRecorder = null;
     releaseMediaStream();
@@ -458,7 +459,7 @@ function stopAudioRecording() {
   }
 
   stopAudioBtn.disabled = true;
-  setRecordingState("Stopping recording...");
+  setRecordingState("");
   mediaRecorder.stop();
 }
 
@@ -488,7 +489,7 @@ async function handleImprove() {
 async function handleTranslate() {
   const input = translateInput.value.trim();
   if (!input) {
-    setStatus("Write Spanish text first.", true);
+    setStatus("Write or paste text in the source language first.", true);
     return;
   }
 
