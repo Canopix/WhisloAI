@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   build-and-release:
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -22,18 +23,26 @@ jobs:
             args: "--target aarch64-apple-darwin"
             macosx_deployment_target: "11.0"
             ggml_cpu_arm_arch: "armv8.2-a+dotprod"
+            cflags: "-U__ARM_FEATURE_MATMUL_INT8"
+            cxxflags: ""
           - platform: macos-15-intel
             args: "--target x86_64-apple-darwin"
             macosx_deployment_target: "10.15"
             ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
           - platform: ubuntu-22.04
             args: ""
             macosx_deployment_target: ""
             ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
           - platform: windows-latest
-            args: ""
+            args: "--bundles nsis"
             macosx_deployment_target: ""
             ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -72,6 +81,10 @@ jobs:
           GGML_CPU_ARM_ARCH: ${{ matrix.ggml_cpu_arm_arch }}
           GGML_NATIVE: "OFF"
           GGML_CPU_ALL_VARIANTS: "OFF"
+          CFLAGS: ${{ matrix.cflags }}
+          CMAKE_C_FLAGS: ${{ matrix.cflags }}
+          CXXFLAGS: ${{ matrix.cxxflags }}
+          CMAKE_CXX_FLAGS: ${{ matrix.cxxflags }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: WhisloAI ${{ github.ref_name }}
