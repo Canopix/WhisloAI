@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./app-icon.png" alt="WhisloAI logo" width="120" />
   <h1>WhisloAI</h1>
-  <p>Desktop AI writing assistant for instant text improvement and translation.</p>
+  <p>Desktop AI assistant for fast translation and dictation from any app.</p>
 </div>
 
 <p align="center">
@@ -10,14 +10,28 @@
   <a href="https://github.com/Canopix/WhisloAI"><img alt="Platform" src="https://img.shields.io/badge/platform-desktop-blue"></a>
 </p>
 
+## Download
+
+Download the latest prebuilt app for macOS, Windows, or Linux:
+
+- https://github.com/Canopix/WhisloAI/releases
+
 ## Overview
 
-WhisloAI helps you rewrite and translate text from anywhere in your desktop workflow.
+WhisloAI helps you translate and dictate text from anywhere in your desktop workflow.
+
+## Why I Built This
+
+I built WhisloAI because I want to keep improving my English every day.
+
+I used to do the same loop all the time: write something, translate it, tweak the tone, paste it back, and repeat. After a while, I thought: why not automate this?
+
+So this app started as a personal tool for my daily workflow. I am sharing it publicly because I want honest feedback, I want to see if it is useful to others, and I want to keep learning by building in public with the community.
 
 Current MVP focuses on:
 
-- `Improve`: rewrite English text
-- `Translate`: Spanish to English
+- `Translate`: source language to target language (configurable in Settings)
+- `Dictate`: record voice, transcribe, translate, and insert back
 - Bring-your-own provider credentials (`OpenAI` and OpenAI-compatible endpoints)
 - Quick overlay actions near focused text inputs
 
@@ -25,21 +39,19 @@ Current MVP focuses on:
 
 - Lightweight desktop app built with Tauri
 - macOS floating anchor + quick popover workflow
-- One-click selected text actions (`Translate selection`, `Improve selection`)
+- One-click selected text translation (`Translate selection`)
 - Provider management (add/update/select active provider)
 - Connection test against `/models`
 - Voice dictation path (`Record -> transcribe -> translate -> insert`)
 - Auto-insert at cursor with manual paste fallback
 - First-run onboarding for required permissions
-- Secure API key storage via system credential store
-- External text import (`--improve-text`, `--improve-text-file`)
-- Configurable global hotkeys from Settings
+- Local API key persistence for configured providers
 
 ## Tech Stack
 
 - Tauri (Rust backend)
 - HTML/CSS/JavaScript frontend
-- Secure key storage with Rust `keyring`
+- Local settings + provider configuration persisted on disk
 
 ## Requirements
 
@@ -63,14 +75,6 @@ npm run build
 npm run tauri build
 ```
 
-## Download Prebuilt App
-
-You can download ready-to-run binaries from the GitHub Releases page:
-
-- https://github.com/Canopix/WhisloAI/releases
-
-No local compilation is required for testers.
-
 ## Publish a Release (Maintainers)
 
 1. Update version values:
@@ -92,19 +96,19 @@ git push origin v0.1.1
 ### Core flow
 
 1. Open a text field in any app
-2. Open the WhisloAI widget (from app button or configured hotkey)
-3. Choose `Improve selection` or `Translate selection`
+2. Open the WhisloAI widget
+3. Choose `Translate selection` (or use dictation)
 4. Insert output back into your active text field
 
 ### Widget workflow
 
 - Keep the widget open while writing
-- Use quick actions to improve/translate selected text
+- Use quick actions to translate selected text or dictate
 - Configure provider, languages, and writing modes from `Settings`
 
 ## Privacy and Security
 
-- API keys are stored in the OS credential store (not plain text config files)
+- API keys are currently persisted locally in app configuration (base64-encoded, not encrypted) to keep setup simple during MVP
 - You control provider selection and credentials
 - Recommended before public deployment: add explicit telemetry and data-handling documentation
 
