@@ -13,18 +13,9 @@ const setLanguagePreference = (preference) => {
   }
 };
 
-const tabs = document.querySelectorAll(".tab");
-const panels = document.querySelectorAll(".panel");
 const statusEl = document.getElementById("status");
 const openSettingsBtn = document.getElementById("open-settings-btn");
 const openWidgetBtn = document.getElementById("open-widget-btn");
-
-const improveInput = document.getElementById("improve-input");
-const improveStyle = document.getElementById("improve-style");
-const improveOutput = document.getElementById("improve-output");
-const improveBtn = document.getElementById("improve-btn");
-const insertImproveBtn = document.getElementById("insert-improve-btn");
-const copyImproveBtn = document.getElementById("copy-improve-btn");
 
 const translateInput = document.getElementById("translate-input");
 const translateStyle = document.getElementById("translate-style");
@@ -109,15 +100,13 @@ function normalizeMode(mode) {
 }
 
 function switchTab(tabName) {
-  tabs.forEach((tab) => {
-    const active = tab.dataset.tab === tabName;
-    tab.classList.toggle("is-active", active);
-    tab.setAttribute("aria-selected", active ? "true" : "false");
-  });
-
-  panels.forEach((panel) => {
-    panel.classList.toggle("is-active", panel.dataset.panel === tabName);
-  });
+  if (tabName !== "translate") {
+    return;
+  }
+  const panel = document.querySelector('.panel[data-panel="translate"]');
+  if (panel) {
+    panel.classList.add("is-active");
+  }
 }
 
 function applyRecordingState(message, isError = false, state = null) {
@@ -281,19 +270,6 @@ function setOnboardingVisible(visible) {
   }
 }
 
-function localizeImportSource(source) {
-  const value = String(source || "")
-    .trim()
-    .toLowerCase();
-  if (value === "context action" || value === "context-action" || value === "single-instance") {
-    return t("main.source.context_action");
-  }
-  if (value === "launch args" || value === "launch-args") {
-    return t("main.source.launch_args");
-  }
-  return source;
-}
-
 function applyMainTranslations() {
   applyTranslations(document);
   refreshStatusTranslation();
@@ -372,6 +348,13 @@ function skipOnboardingForSession() {
 }
 
 function applyOnboardingStatus(status) {
+  const platform = String(status?.platform || "")
+    .trim()
+    .toLowerCase();
+  const supportsPermissionSettings = platform === "macos" || platform === "windows";
+  onboardingMicSettingsBtn.hidden = !supportsPermissionSettings;
+  onboardingAccessibilitySettingsBtn.hidden = !supportsPermissionSettings;
+
   const needsAccessibility = Boolean(status && status.needsAccessibility);
   onboardingAccessibilityStep.hidden = !needsAccessibility;
 
@@ -414,18 +397,6 @@ function pickRecorderMimeType() {
 
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
   return candidates.find((mime) => MediaRecorder.isTypeSupported(mime)) || null;
-}
-
-function applyExternalImproveText(text, source = "external") {
-  if (!text || !text.trim()) {
-    return;
-  }
-
-  switchTab("improve");
-  improveInput.value = text.trim();
-  improveInput.focus();
-  improveInput.setSelectionRange(improveInput.value.length, improveInput.value.length);
-  setStatusKey("main.status.imported", false, { source: localizeImportSource(source) });
 }
 
 function arrayBufferToBase64(arrayBuffer) {
@@ -601,29 +572,6 @@ function handleMainVisibilityChange() {
   }
 }
 
-async function handleImprove() {
-  const input = improveInput.value.trim();
-  if (!input) {
-    setStatusKey("main.status.write_english_first", true);
-    return;
-  }
-
-  improveBtn.disabled = true;
-  setStatusKey("main.status.improving");
-  try {
-    const output = await invoke("improve_text", {
-      input,
-      style: improveStyle.value,
-    });
-    improveOutput.value = output;
-    setStatusKey("main.status.text_improved");
-  } catch (error) {
-    setStatus(formatError(error), true);
-  } finally {
-    improveBtn.disabled = false;
-  }
-}
-
 async function handleTranslate() {
   const input = translateInput.value.trim();
   if (!input) {
@@ -693,49 +641,12 @@ async function openWidgetWindow() {
   }
 }
 
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-});
-
-const tablist = document.querySelector(".tabs");
-if (tablist) {
-  tablist.addEventListener("keydown", (e) => {
-    const tabEls = Array.from(tablist.querySelectorAll('[role="tab"]'));
-    const idx = tabEls.indexOf(e.target);
-    if (idx === -1) return;
-    let nextIdx = idx;
-    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      e.preventDefault();
-      nextIdx = idx <= 0 ? tabEls.length - 1 : idx - 1;
-    } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-      e.preventDefault();
-      nextIdx = idx >= tabEls.length - 1 ? 0 : idx + 1;
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      nextIdx = 0;
-    } else if (e.key === "End") {
-      e.preventDefault();
-      nextIdx = tabEls.length - 1;
-    } else {
-      return;
-    }
-    const nextTab = tabEls[nextIdx];
-    if (nextTab) {
-      nextTab.focus();
-      switchTab(nextTab.dataset.tab);
-    }
-  });
-}
-
 openSettingsBtn.addEventListener("click", openSettingsWindow);
 openWidgetBtn.addEventListener("click", openWidgetWindow);
-improveBtn.addEventListener("click", handleImprove);
 translateBtn.addEventListener("click", handleTranslate);
-insertImproveBtn.addEventListener("click", () => insertTextAtCursor(improveOutput.value));
 insertTranslateBtn.addEventListener("click", () => insertTextAtCursor(translateOutput.value));
 recordAudioBtn.addEventListener("click", startAudioRecording);
 stopAudioBtn.addEventListener("click", stopAudioRecording);
-copyImproveBtn.addEventListener("click", () => copyText(improveOutput.value));
 copyTranslateBtn.addEventListener("click", () => copyText(translateOutput.value));
 onboardingMicBtn.addEventListener("click", requestOnboardingMicrophonePermission);
 onboardingMicSettingsBtn.addEventListener("click", () => openPermissionSettings("microphone"));
@@ -755,7 +666,6 @@ async function bootstrap() {
     try {
       const promptSettings = await invoke("get_prompt_settings");
       const defaultMode = normalizeMode(promptSettings?.quickMode);
-      improveStyle.value = defaultMode;
       translateStyle.value = defaultMode;
     } catch (_) {
       // keep UI defaults
@@ -767,31 +677,9 @@ async function bootstrap() {
       applyMainTranslations();
     });
 
-    await listen("external-improve-text", (event) => {
-      const payload = event.payload;
-      if (typeof payload === "string") {
-        applyExternalImproveText(payload, "context action");
-        return;
-      }
-      if (payload && typeof payload.text === "string") {
-        applyExternalImproveText(payload.text, payload.source || "context action");
-      }
-    });
-
-    const pendingText = await invoke("consume_pending_improve_text");
-    if (pendingText) {
-      applyExternalImproveText(pendingText, "launch args");
-    }
-
     await listen("hotkey-triggered", (event) => {
       const payload = event.payload;
       const action = payload && typeof payload === "object" ? payload.action : String(payload || "");
-
-      if (action === "open-improve") {
-        switchTab("improve");
-        improveInput.focus();
-        return;
-      }
 
       if (action === "open-dictate-translate") {
         switchTab("translate");

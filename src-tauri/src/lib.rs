@@ -15,7 +15,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 const KEYRING_SERVICE: &str = "whisloai";
-const QUICK_WINDOW_WIDTH: f64 = 252.0;
+const QUICK_WINDOW_WIDTH_COMPACT: f64 = 214.0;
+const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
 const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
 const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
 const TRAY_ICON_ID: &str = "whisloai-tray";
@@ -26,9 +27,6 @@ const SUPPORTED_STYLE_MODES: [&str; 5] = ["simple", "professional", "friendly", 
 const INPUT_TARGET_TTL_MS: u128 = 90_000;
 const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
 const REFOCUS_POST_RESTORE_MS: u64 = 35;
-
-#[derive(Default)]
-struct PendingLaunchText(Mutex<Option<String>>);
 
 #[derive(Default)]
 struct PendingQuickAction(Mutex<Option<String>>);
@@ -55,7 +53,6 @@ static QUICK_OPEN_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 #[serde(rename_all = "camelCase")]
 struct HotkeyConfig {
     open_app: String,
-    open_improve: String,
     open_dictate_translate: String,
 }
 
@@ -66,7 +63,6 @@ struct ProviderConfig {
     name: String,
     provider_type: String,
     base_url: String,
-    improve_model: String,
     translate_model: String,
     #[serde(default = "default_transcribe_model")]
     transcribe_model: String,
@@ -82,7 +78,6 @@ struct ProviderView {
     name: String,
     provider_type: String,
     base_url: String,
-    improve_model: String,
     translate_model: String,
     transcribe_model: String,
     is_active: bool,
@@ -97,7 +92,6 @@ struct ProviderInput {
     name: String,
     provider_type: String,
     base_url: String,
-    improve_model: String,
     translate_model: String,
     #[serde(default)]
     transcribe_model: Option<String>,
@@ -106,8 +100,6 @@ struct ProviderInput {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct PromptSettings {
-    #[serde(default = "default_improve_system_prompt")]
-    improve_system_prompt: String,
     #[serde(default = "default_translate_system_prompt")]
     translate_system_prompt: String,
     #[serde(default = "default_source_language")]
@@ -123,7 +115,6 @@ struct PromptSettings {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PromptSettingsInput {
-    improve_system_prompt: String,
     translate_system_prompt: String,
     #[serde(default)]
     source_language: String,
@@ -222,13 +213,6 @@ struct AudioTranscriptionResponse {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ExternalImproveEvent {
-    text: String,
-    source: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
 struct HotkeyTriggerEvent {
     action: String,
 }
@@ -279,7 +263,6 @@ impl Default for AppConfig {
 fn default_hotkeys() -> HotkeyConfig {
     HotkeyConfig {
         open_app: "CommandOrControl+Shift+Space".to_string(),
-        open_improve: "CommandOrControl+Shift+I".to_string(),
         open_dictate_translate: "CommandOrControl+Shift+D".to_string(),
     }
 }
@@ -290,7 +273,6 @@ fn default_provider() -> ProviderConfig {
         name: "OpenAI".to_string(),
         provider_type: "openai".to_string(),
         base_url: "https://api.openai.com/v1".to_string(),
-        improve_model: "gpt-4.1-mini".to_string(),
         translate_model: "gpt-4.1-mini".to_string(),
         transcribe_model: default_transcribe_model(),
         api_key_fallback_b64: None,
@@ -300,10 +282,6 @@ fn default_provider() -> ProviderConfig {
 
 fn default_transcribe_model() -> String {
     "gpt-4o-mini-transcribe".to_string()
-}
-
-fn default_improve_system_prompt() -> String {
-    "You are a writing assistant. Rewrite text in clear, concise, natural English. Keep intent and facts unchanged. Return only final text.".to_string()
 }
 
 fn default_translate_system_prompt() -> String {
@@ -349,7 +327,6 @@ fn default_mode_instructions() -> HashMap<String, String> {
 
 fn default_prompt_settings() -> PromptSettings {
     PromptSettings {
-        improve_system_prompt: default_improve_system_prompt(),
         translate_system_prompt: default_translate_system_prompt(),
         source_language: default_source_language(),
         target_language: default_target_language(),
@@ -381,17 +358,6 @@ fn normalize_ui_language_preference(value: &str) -> String {
 fn normalize_prompt_settings(settings: &mut PromptSettings) -> bool {
     let mut changed = false;
 
-    if settings.improve_system_prompt.trim().is_empty() {
-        settings.improve_system_prompt = default_improve_system_prompt();
-        changed = true;
-    } else {
-        let clean = settings.improve_system_prompt.trim().to_string();
-        if clean != settings.improve_system_prompt {
-            settings.improve_system_prompt = clean;
-            changed = true;
-        }
-    }
-
     if settings.translate_system_prompt.trim().is_empty() {
         settings.translate_system_prompt = default_translate_system_prompt();
         changed = true;
@@ -400,19 +366,6 @@ fn normalize_prompt_settings(settings: &mut PromptSettings) -> bool {
         if clean != settings.translate_system_prompt {
             settings.translate_system_prompt = clean;
             changed = true;
-        }
-        // Migrate old prompts that hardcode languages to use {source} and {target} placeholders
-        if !settings.translate_system_prompt.contains("{source}")
-            || !settings.translate_system_prompt.contains("{target}")
-        {
-            let migrated = settings
-                .translate_system_prompt
-                .replace("Spanish", "{source}")
-                .replace("English", "{target}");
-            if migrated != settings.translate_system_prompt {
-                settings.translate_system_prompt = migrated;
-                changed = true;
-            }
         }
     }
 
@@ -667,7 +620,6 @@ fn provider_to_view(provider: &ProviderConfig) -> ProviderView {
         name: provider.name.clone(),
         provider_type: provider.provider_type.clone(),
         base_url: provider.base_url.clone(),
-        improve_model: provider.improve_model.clone(),
         translate_model: provider.translate_model.clone(),
         transcribe_model: provider.transcribe_model.clone(),
         is_active: provider.is_active,
@@ -972,46 +924,33 @@ fn restore_last_external_app(app: &tauri::AppHandle) {
     }
 }
 
-fn read_external_text_file(path: &str) -> Option<String> {
-    let content = fs::read_to_string(path).ok()?;
-    let text = content.trim().to_string();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
+fn refresh_last_input_focus_target_from_snapshot(app: &tauri::AppHandle) {
+    let Some(snapshot) = focused_text_anchor_snapshot(app) else {
+        return;
+    };
+
+    let Some(bundle_id) = snapshot.bundle_id.as_deref() else {
+        return;
+    };
+
+    save_last_external_app_bundle(app, bundle_id);
+
+    if let Some((focus_x, focus_y)) = snapshot.input_focus_point {
+        save_last_input_focus_target(
+            app,
+            InputFocusTarget {
+                bundle_id: bundle_id.to_string(),
+                x: focus_x.max(1),
+                y: focus_y.max(1),
+                captured_at_ms: now_millis(),
+            },
+        );
     }
-}
-
-fn parse_improve_text_from_args(args: &[String]) -> Option<String> {
-    let mut index = 0;
-
-    while index < args.len() {
-        match args[index].as_str() {
-            "--improve-text" => {
-                let value = args.get(index + 1)?.trim().to_string();
-                if !value.is_empty() {
-                    return Some(value);
-                }
-            }
-            "--improve-text-file" => {
-                if let Some(path) = args.get(index + 1) {
-                    if let Some(text) = read_external_text_file(path) {
-                        return Some(text);
-                    }
-                }
-            }
-            _ => {}
-        }
-        index += 1;
-    }
-
-    None
 }
 
 fn normalize_hotkeys(hotkeys: &HotkeyConfig) -> HotkeyConfig {
     HotkeyConfig {
         open_app: hotkeys.open_app.trim().to_string(),
-        open_improve: hotkeys.open_improve.trim().to_string(),
         open_dictate_translate: hotkeys.open_dictate_translate.trim().to_string(),
     }
 }
@@ -1019,10 +958,6 @@ fn normalize_hotkeys(hotkeys: &HotkeyConfig) -> HotkeyConfig {
 fn validate_hotkeys(hotkeys: &HotkeyConfig) -> Result<Vec<(String, String)>, String> {
     let bindings = vec![
         ("open-app".to_string(), hotkeys.open_app.trim().to_string()),
-        (
-            "open-improve".to_string(),
-            hotkeys.open_improve.trim().to_string(),
-        ),
         (
             "open-dictate-translate".to_string(),
             hotkeys.open_dictate_translate.trim().to_string(),
@@ -1072,7 +1007,6 @@ fn emit_quick_action(app: &tauri::AppHandle, action: &str) {
 fn handle_hotkey_trigger(app: &tauri::AppHandle, action: &str) {
     let quick_action = match action {
         "open-app" => "open-app",
-        "open-improve" => "open-improve",
         "open-dictate-translate" => "open-dictate-translate",
         _ => "open-app",
     };
@@ -1108,25 +1042,6 @@ fn register_hotkeys(app: &tauri::AppHandle, hotkeys: &HotkeyConfig) -> Result<()
     }
 
     Ok(())
-}
-
-fn save_pending_text(app: &tauri::AppHandle, text: String) {
-    if let Some(state) = app.try_state::<PendingLaunchText>() {
-        if let Ok(mut pending) = state.0.lock() {
-            *pending = Some(text);
-        }
-    }
-}
-
-fn emit_external_text_event(app: &tauri::AppHandle, text: String, source: &str) {
-    let payload = ExternalImproveEvent {
-        text: text.clone(),
-        source: source.to_string(),
-    };
-
-    if app.emit("external-improve-text", payload).is_err() {
-        save_pending_text(app, text);
-    }
 }
 
 fn extract_content(content: &serde_json::Value) -> Option<String> {
@@ -1405,8 +1320,8 @@ fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     tauri::WebviewWindowBuilder::new(app, "quick", tauri::WebviewUrl::App("widget.html".into()))
         .title("WhisloAI Quick")
-        .inner_size(QUICK_WINDOW_WIDTH, QUICK_WINDOW_HEIGHT_COMPACT)
-        .min_inner_size(QUICK_WINDOW_WIDTH, QUICK_WINDOW_HEIGHT_COMPACT)
+        .inner_size(QUICK_WINDOW_WIDTH_COMPACT, QUICK_WINDOW_HEIGHT_COMPACT)
+        .min_inner_size(QUICK_WINDOW_WIDTH_COMPACT, QUICK_WINDOW_HEIGHT_COMPACT)
         .resizable(false)
         .transparent(true)
         .always_on_top(true)
@@ -1431,7 +1346,13 @@ fn clamp_quick_window_position(
     quick_width: i32,
     quick_height: i32,
 ) -> (i32, i32) {
-    if let Ok(Some(monitor)) = anchor.monitor_from_point(default_x as f64, default_y as f64) {
+    let monitor = anchor
+        .monitor_from_point(default_x as f64, default_y as f64)
+        .ok()
+        .flatten()
+        .or_else(|| anchor.current_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor {
         let work = monitor.work_area();
         let min_x = work.position.x + 8;
         let min_y = work.position.y + 8;
@@ -1439,7 +1360,33 @@ fn clamp_quick_window_position(
         let max_y = (work.position.y + work.size.height as i32 - quick_height - 8).max(min_y);
         (default_x.clamp(min_x, max_x), default_y.clamp(min_y, max_y))
     } else {
-        (default_x.max(8), default_y.max(8))
+        (default_x, default_y)
+    }
+}
+
+fn clamp_anchor_window_position(
+    anchor: &tauri::WebviewWindow,
+    default_x: i32,
+    default_y: i32,
+) -> (i32, i32) {
+    let anchor_size = anchor.outer_size().unwrap_or_default();
+    let anchor_width = anchor_size.width as i32;
+    let anchor_height = anchor_size.height as i32;
+    let monitor = anchor
+        .monitor_from_point(default_x as f64, default_y as f64)
+        .ok()
+        .flatten()
+        .or_else(|| anchor.current_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor {
+        let work = monitor.work_area();
+        let min_x = work.position.x + 8;
+        let min_y = work.position.y + 8;
+        let max_x = (work.position.x + work.size.width as i32 - anchor_width - 8).max(min_x);
+        let max_y = (work.position.y + work.size.height as i32 - anchor_height - 8).max(min_y);
+        (default_x.clamp(min_x, max_x), default_y.clamp(min_y, max_y))
+    } else {
+        (default_x, default_y)
     }
 }
 
@@ -1668,10 +1615,31 @@ fn open_quick_window_with_action(
 }
 
 #[cfg(target_os = "macos")]
-fn focused_text_anchor_snapshot() -> Option<FocusedAnchorSnapshot> {
+fn logical_to_physical(value: i32, scale_factor: f64) -> i32 {
+    ((value as f64) * scale_factor).round() as i32
+}
+
+#[cfg(target_os = "macos")]
+fn anchor_scale_factor(app: &tauri::AppHandle) -> f64 {
+    let scale_factor = app
+        .get_webview_window("anchor")
+        .and_then(|window| window.current_monitor().ok().flatten())
+        .map(|monitor| monitor.scale_factor())
+        .unwrap_or(1.0);
+
+    if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn focused_text_anchor_snapshot(app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
     let script = r#"
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView"}
 set blockedTerms to {"address", "url", "navigation", "omnibox", "search", "buscar", "password", "contraseña", "contrasena", "email", "correo"}
+set browserBundles to {"com.apple.Safari", "com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac", "org.mozilla.firefox", "company.thebrowser.Browser"}
 try
   tell application "System Events"
     set frontProcess to first application process whose frontmost is true
@@ -1694,7 +1662,11 @@ try
       set focusedElement to value of attribute "AXFocusedUIElement"
       if focusedElement is missing value then return "NONE"
       set roleName to value of attribute "AXRole" of focusedElement
-      if textRoles does not contain roleName then return "NONE"
+      set isEditable to false
+      try
+        set isEditable to value of attribute "AXEditable" of focusedElement
+      end try
+      if textRoles does not contain roleName and isEditable is not true then return "NONE"
 
       set subroleName to ""
       try
@@ -1720,18 +1692,40 @@ try
         end try
       end repeat
 
-      ignoring case
-        repeat with blocked in blockedTerms
-          if metadataText contains (blocked as string) then return "NONE"
-        end repeat
-      end ignoring
+      set shouldApplyBlockedTerms to false
+      repeat with browserBundle in browserBundles
+        if processBundleId is (browserBundle as string) then
+          set shouldApplyBlockedTerms to true
+          exit repeat
+        end if
+      end repeat
+      if shouldApplyBlockedTerms then
+        ignoring case
+          repeat with blocked in blockedTerms
+            if metadataText contains (blocked as string) then return "NONE"
+          end repeat
+        end ignoring
+      end if
 
-      set p to value of attribute "AXPosition" of focusedElement
-      set s to value of attribute "AXSize" of focusedElement
+      try
+        set p to value of attribute "AXPosition" of focusedElement
+        set s to value of attribute "AXSize" of focusedElement
+      on error
+        return "NONE"
+      end try
+
       set px to item 1 of p as integer
       set py to item 2 of p as integer
       set pw to item 1 of s as integer
       set ph to item 2 of s as integer
+      if pw < 2 or ph < 2 then return "NONE"
+
+      ignoring case
+        if domInputType is "password" then return "NONE"
+        if roleName contains "secure" then return "NONE"
+        if metadataText contains "password" then return "NONE"
+      end ignoring
+
       return processBundleId & tab & (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)
     end tell
   end tell
@@ -1760,6 +1754,13 @@ end try
     let y = parts.next()?.parse::<i32>().ok()?;
     let w = parts.next()?.parse::<i32>().ok()?;
     let h = parts.next()?.parse::<i32>().ok()?;
+    let scale_factor = anchor_scale_factor(app);
+    let px = logical_to_physical(x, scale_factor);
+    let py = logical_to_physical(y, scale_factor);
+    let pw = logical_to_physical(w, scale_factor);
+    let ph = logical_to_physical(h, scale_factor);
+    let offset_x = logical_to_physical(10, scale_factor);
+    let offset_y = logical_to_physical(44, scale_factor);
 
     let bundle_id = {
         let clean = bundle_raw.trim();
@@ -1770,16 +1771,16 @@ end try
         }
     };
 
-    let input_focus_point = if w > 2 && h > 2 {
-        Some((x + (w / 2), y + (h / 2)))
+    let input_focus_point = if pw > 2 && ph > 2 {
+        Some((px + (pw / 2), py + (ph / 2)))
     } else {
         None
     };
 
     Some(FocusedAnchorSnapshot {
         position: AnchorPosition {
-            x: (x + w - 10).max(8),
-            y: (y - 44).max(8), // Above the input row, not among inline icons (emoji, mic, etc.)
+            x: px + pw - offset_x,
+            y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
         },
         bundle_id,
         input_focus_point,
@@ -1787,7 +1788,7 @@ end try
 }
 
 #[cfg(not(target_os = "macos"))]
-fn focused_text_anchor_snapshot() -> Option<FocusedAnchorSnapshot> {
+fn focused_text_anchor_snapshot(_app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
     None
 }
 
@@ -1830,7 +1831,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 }
             }
 
-            let snapshot = focused_text_anchor_snapshot();
+            let snapshot = focused_text_anchor_snapshot(&app);
             let next = snapshot.as_ref().map(|entry| entry.position);
 
             if let Some(entry) = snapshot.as_ref() {
@@ -1863,16 +1864,19 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             if next != last {
                 match next {
                     Some(position) => {
+                        let (x, y) = clamp_anchor_window_position(&anchor, position.x, position.y);
+                        save_last_anchor_position(&app, AnchorPosition { x, y });
                         let _ = anchor.set_position(Position::Physical(PhysicalPosition::new(
-                            position.x, position.y,
+                            x, y,
                         )));
                         let _ = anchor.show();
+                        last = Some(AnchorPosition { x, y });
                     }
                     None => {
                         let _ = anchor.hide();
+                        last = None;
                     }
                 }
-                last = next;
             }
 
             thread::sleep(std::time::Duration::from_millis(180));
@@ -2205,6 +2209,11 @@ fn open_quick_window(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn set_quick_window_expanded(app: tauri::AppHandle, expanded: bool) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("quick") {
+        let target_width = if expanded {
+            QUICK_WINDOW_WIDTH_EXPANDED
+        } else {
+            QUICK_WINDOW_WIDTH_COMPACT
+        };
         let target_height = if expanded {
             QUICK_WINDOW_HEIGHT_EXPANDED
         } else {
@@ -2213,7 +2222,7 @@ fn set_quick_window_expanded(app: tauri::AppHandle, expanded: bool) -> Result<()
 
         window
             .set_size(Size::Logical(LogicalSize::new(
-                QUICK_WINDOW_WIDTH,
+                target_width,
                 target_height,
             )))
             .map_err(|e| format!("Could not resize quick window: {e}"))?;
@@ -2238,7 +2247,6 @@ fn close_quick_window(app: tauri::AppHandle) -> Result<(), String> {
 fn open_main_mode(app: tauri::AppHandle, mode: String) -> Result<(), String> {
     let normalized = mode.trim().to_lowercase();
     let action = match normalized.as_str() {
-        "improve" => "open-improve",
         "translate" => "open-dictate-translate",
         "dictate" => "open-dictate-translate-record",
         "app" => "open-app",
@@ -2301,7 +2309,6 @@ fn save_prompt_settings(
     let source = prompt_settings.source_language.trim().to_string();
     let target = prompt_settings.target_language.trim().to_string();
     let mut next = PromptSettings {
-        improve_system_prompt: prompt_settings.improve_system_prompt.trim().to_string(),
         translate_system_prompt: prompt_settings.translate_system_prompt.trim().to_string(),
         source_language: if source.is_empty() {
             default_source_language()
@@ -2317,9 +2324,6 @@ fn save_prompt_settings(
         quick_mode: normalize_mode_name(&prompt_settings.quick_mode),
     };
 
-    if next.improve_system_prompt.is_empty() {
-        return Err("Improve system prompt cannot be empty.".to_string());
-    }
     if next.translate_system_prompt.is_empty() {
         return Err("Translate system prompt cannot be empty.".to_string());
     }
@@ -2369,13 +2373,11 @@ fn save_provider(
     let normalized_name = provider.name.trim().to_string();
     let normalized_type = provider.provider_type.trim().to_string();
     let normalized_base_url = normalize_base_url(&provider.base_url);
-    let normalized_improve_model = provider.improve_model.trim().to_string();
     let normalized_translate_model = provider.translate_model.trim().to_string();
 
     if normalized_name.is_empty()
         || normalized_type.is_empty()
         || normalized_base_url.is_empty()
-        || normalized_improve_model.is_empty()
         || normalized_translate_model.is_empty()
     {
         return Err("Complete provider name, type, base URL and models before saving.".to_string());
@@ -2432,7 +2434,6 @@ fn save_provider(
             existing.name = normalized_name.clone();
             existing.provider_type = normalized_type.clone();
             existing.base_url = normalized_base_url.clone();
-            existing.improve_model = normalized_improve_model.clone();
             existing.translate_model = normalized_translate_model.clone();
             existing.transcribe_model = transcribe_model.clone();
             updated = true;
@@ -2450,7 +2451,6 @@ fn save_provider(
             name: normalized_name,
             provider_type: normalized_type,
             base_url: normalized_base_url,
-            improve_model: normalized_improve_model,
             translate_model: normalized_translate_model,
             transcribe_model,
             api_key_fallback_b64: incoming_api_key
@@ -2833,12 +2833,17 @@ async fn transcribe_audio(
 }
 
 #[tauri::command]
-fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextResult, String> {
+fn auto_insert_text(
+    app: tauri::AppHandle,
+    text: String,
+    prefer_replace_selection: Option<bool>,
+) -> Result<InsertTextResult, String> {
     let total_started = Instant::now();
     let value = text.trim();
     if value.is_empty() {
         return Err("Nothing to insert.".to_string());
     }
+    let prefer_replace_selection = prefer_replace_selection.unwrap_or(false);
 
     let previous_clipboard = app.clipboard().read_text().ok();
 
@@ -2853,46 +2858,34 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
 
     restore_last_external_app(&app);
     thread::sleep(std::time::Duration::from_millis(180));
-
-    let (target_age_ms, refocus_attempted, refocus_ok) = match refocus_last_input_target(&app) {
-        Ok(attempt) => (attempt.target_age_ms, attempt.attempted, attempt.ok),
-        Err(error) => {
-            let result = InsertTextResult {
-                copied: true,
-                pasted: false,
-                message: format!("Automatic paste skipped: could not restore input focus: {error}"),
-            };
-            log_auto_insert_trace(
-                "refocus-error",
-                Some(error.as_str()),
-                None,
-                true,
-                false,
-                false,
-                total_started.elapsed().as_millis(),
-            );
-            return Ok(result);
+    let mut refocus_error_message: Option<String> = None;
+    let refocus_attempt = if prefer_replace_selection {
+        RefocusAttempt {
+            attempted: false,
+            ok: false,
+            target_age_ms: None,
+        }
+    } else {
+        refresh_last_input_focus_target_from_snapshot(&app);
+        match refocus_last_input_target(&app) {
+            Ok(attempt) => attempt,
+            Err(error) => {
+                refocus_error_message = Some(error);
+                RefocusAttempt {
+                    attempted: true,
+                    ok: false,
+                    target_age_ms: None,
+                }
+            }
         }
     };
-
-    if !refocus_ok {
-        let result = InsertTextResult {
-            copied: true,
-            pasted: false,
-            message:
-                "Automatic paste skipped: input focus target not restored. Click target input and try again."
-                    .to_string(),
-        };
-        log_auto_insert_trace(
-            "focus-target-not-restored",
-            None,
-            target_age_ms,
-            refocus_attempted,
-            false,
-            false,
-            total_started.elapsed().as_millis(),
-        );
-        return Ok(result);
+    let target_age_ms = refocus_attempt.target_age_ms;
+    let refocus_attempted = refocus_attempt.attempted;
+    let refocus_ok = refocus_attempt.ok;
+    if prefer_replace_selection {
+        thread::sleep(std::time::Duration::from_millis(45));
+    } else if !refocus_ok {
+        thread::sleep(std::time::Duration::from_millis(70));
     }
 
     let mut paste_error_message: Option<String> = None;
@@ -2900,7 +2893,15 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
         Ok(()) => InsertTextResult {
             copied: true,
             pasted: true,
-            message: "Text copied and pasted in the active app.".to_string(),
+            message: if prefer_replace_selection {
+                "Text copied and pasted in the active app, replacing the current selection."
+                    .to_string()
+            } else if refocus_ok {
+                "Text copied and pasted in the active app.".to_string()
+            } else {
+                "Text copied and pasted in the active app. Focus target restore was skipped."
+                    .to_string()
+            },
         },
         Err(error) => InsertTextResult {
             copied: true,
@@ -2919,9 +2920,28 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
         }
     }
 
+    let trace_error_message = paste_error_message
+        .as_deref()
+        .or(refocus_error_message.as_deref());
+    let trace_outcome = if result.pasted {
+        if prefer_replace_selection {
+            "ok-replace-selection"
+        } else if refocus_ok {
+            "ok"
+        } else {
+            "ok-fallback-no-refocus"
+        }
+    } else if refocus_error_message.is_some() {
+        "paste-error-after-refocus-error"
+    } else if !refocus_ok {
+        "paste-error-no-refocus"
+    } else {
+        "paste-error"
+    };
+
     log_auto_insert_trace(
-        if result.pasted { "ok" } else { "paste-error" },
-        paste_error_message.as_deref(),
+        trace_outcome,
+        trace_error_message,
         target_age_ms,
         refocus_attempted,
         refocus_ok,
@@ -2930,40 +2950,6 @@ fn auto_insert_text(app: tauri::AppHandle, text: String) -> Result<InsertTextRes
     );
 
     Ok(result)
-}
-
-#[tauri::command]
-async fn improve_text(
-    app: tauri::AppHandle,
-    input: String,
-    style: String,
-) -> Result<String, String> {
-    if input.trim().is_empty() {
-        return Err("Input text is empty.".to_string());
-    }
-
-    let config = load_config(&app)?;
-    let provider = active_provider(&config)?;
-    let api_key = provider_api_key(&provider)?;
-    let (mode_name, mode_instruction) = mode_instruction_for(&config.prompt_settings, &style);
-    let system_prompt = config
-        .prompt_settings
-        .improve_system_prompt
-        .trim()
-        .to_string();
-    let user_prompt = format!(
-        "Mode: {mode_name}\nMode instruction: {mode_instruction}\nAudience: coworker.\n\nText:\n{}",
-        input.trim()
-    );
-
-    run_chat_completion(
-        &provider,
-        &api_key,
-        &provider.improve_model,
-        &system_prompt,
-        &user_prompt,
-    )
-    .await
 }
 
 #[tauri::command]
@@ -3004,17 +2990,10 @@ async fn translate_text(
     .await
 }
 
-#[tauri::command]
-fn consume_pending_improve_text(state: tauri::State<'_, PendingLaunchText>) -> Option<String> {
-    let mut pending = state.0.lock().ok()?;
-    pending.take()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(PendingLaunchText::default())
         .manage(PendingQuickAction::default())
         .manage(LastExternalAppBundle::default())
         .manage(LastAnchorPosition::default())
@@ -3022,11 +3001,7 @@ pub fn run() {
         .manage(LastInputFocusTarget::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if let Some(text) = parse_improve_text_from_args(&args) {
-                emit_external_text_event(app, text, "single-instance");
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .on_window_event(|window, event| {
             let tauri::WindowEvent::CloseRequested { api, .. } = event else {
                 return;
@@ -3059,11 +3034,6 @@ pub fn run() {
 
             if let Err(error) = setup_tray_icon(app.handle()) {
                 log::warn!("Tray icon is unavailable: {error}");
-            }
-
-            let launch_args = std::env::args().collect::<Vec<_>>();
-            if let Some(text) = parse_improve_text_from_args(&launch_args) {
-                save_pending_text(app.handle(), text);
             }
 
             let config = load_config(app.handle())?;
@@ -3111,9 +3081,7 @@ pub fn run() {
             test_provider_connection_input,
             transcribe_audio,
             auto_insert_text,
-            improve_text,
             translate_text,
-            consume_pending_improve_text,
             consume_pending_quick_action,
         ])
         .run(tauri::generate_context!())

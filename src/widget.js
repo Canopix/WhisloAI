@@ -16,7 +16,6 @@ const setLanguagePreference = (preference) => {
 const quickShell = document.getElementById("quick-shell");
 const quickToolbar = document.querySelector(".quick-toolbar");
 const translateSelectionBtn = document.getElementById("quick-translate-selection-btn");
-const improveSelectionBtn = document.getElementById("quick-improve-selection-btn");
 const dictateBtn = document.getElementById("quick-dictate-btn");
 const dictateIconEl = document.getElementById("quick-dictate-icon");
 const dictateSpinnerEl = document.getElementById("quick-dictate-spinner");
@@ -236,7 +235,6 @@ function setBusy(busy) {
   isBusy = busy;
   quickShell.classList.toggle("is-busy", busy);
   translateSelectionBtn.disabled = busy || isRecording;
-  improveSelectionBtn.disabled = busy || isRecording;
   settingsBtn.disabled = busy || isRecording;
   dictateBtn.disabled = busy && !isRecording;
 }
@@ -282,8 +280,12 @@ function stopAndReleaseStream() {
   stopRecordingVisualizer();
 }
 
-async function insertResultText(output) {
-  const result = await invoke("auto_insert_text", { text: output });
+async function insertResultText(output, options = {}) {
+  const { preferReplaceSelection = false } = options;
+  const result = await invoke("auto_insert_text", {
+    text: output,
+    preferReplaceSelection,
+  });
   if (!result || !result.pasted) {
     try {
       await invoke("open_quick_window");
@@ -293,7 +295,7 @@ async function insertResultText(output) {
   }
 }
 
-async function runSelectionAction(mode) {
+async function runSelectionAction() {
   if (isBusy || isRecording) {
     return;
   }
@@ -308,12 +310,9 @@ async function runSelectionAction(mode) {
     }
     await modePromise;
 
-    const output =
-      mode === "improve"
-        ? await invoke("improve_text", { input, style: quickMode })
-        : await invoke("translate_text", { input, style: quickMode });
+    const output = await invoke("translate_text", { input, style: quickMode });
 
-    await insertResultText(output);
+    await insertResultText(output, { preferReplaceSelection: true });
   } catch (error) {
     try {
       await invoke("open_quick_window");
@@ -568,10 +567,6 @@ function runQuickAction(action) {
   if (!action) {
     return;
   }
-  if (action === "open-improve") {
-    runSelectionAction("improve");
-    return;
-  }
   if (action === "open-dictate-translate" || action === "open-dictate-translate-record") {
     if (isRecording) {
       stopDictation();
@@ -581,12 +576,11 @@ function runQuickAction(action) {
     return;
   }
   if (action === "open-app") {
-    improveSelectionBtn.focus();
+    translateSelectionBtn.focus();
   }
 }
 
-translateSelectionBtn.addEventListener("click", () => runSelectionAction("translate"));
-improveSelectionBtn.addEventListener("click", () => runSelectionAction("improve"));
+translateSelectionBtn.addEventListener("click", runSelectionAction);
 dictateBtn.addEventListener("click", () => {
   if (isRecording) stopDictation();
   else startDictation();
@@ -634,7 +628,7 @@ async function bootstrap() {
     const pending = await invoke("consume_pending_quick_action");
     runQuickAction(pending || "open-app");
   } catch (_) {
-    improveSelectionBtn.focus();
+    translateSelectionBtn.focus();
   }
 }
 

@@ -592,8 +592,49 @@ body {
 
 .onboarding {
   display: block;
-  border: 1px solid #c7d8f4;
-  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+  border: 1px solid #d6dde5;
+  background:
+    radial-gradient(circle at 88% 4%, rgba(15, 118, 110, 0.08) 0%, rgba(15, 118, 110, 0) 34%),
+    radial-gradient(circle at 0% 100%, rgba(31, 42, 55, 0.05) 0%, rgba(31, 42, 55, 0) 28%),
+    #ffffff;
+}
+
+.onboarding-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.onboarding-brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid #cfe0db;
+  background: linear-gradient(145deg, #e9f8f5 0%, #f7fcfb 100%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.onboarding-brand-mark img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.onboarding-header-copy h2 {
+  margin: 0;
+}
+
+.onboarding-header-copy .hint {
+  margin: 5px 0 0;
+}
+
+.onboarding-platform {
+  color: #415468;
+  font-size: 12px;
 }
 
 .onboarding[hidden] {
@@ -608,8 +649,8 @@ body {
 
 .onboarding-step {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 12px;
+  padding: 12px;
   background: #fff;
 }
 
@@ -799,7 +840,6 @@ button.quick-close-btn:hover {
 }
 
 .quick-toolbar.is-recording .quick-app-pill,
-.quick-toolbar.is-recording #quick-improve-selection-btn,
 .quick-toolbar.is-recording #quick-translate-selection-btn,
 .quick-toolbar.is-recording #quick-settings-btn {
   width: 0;

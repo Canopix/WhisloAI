@@ -37,7 +37,6 @@ const providerId = document.getElementById("provider-id");
 const providerName = document.getElementById("provider-name");
 const providerType = document.getElementById("provider-type");
 const providerBaseUrl = document.getElementById("provider-base-url");
-const providerImproveModel = document.getElementById("provider-improve-model");
 const providerTranslateModel = document.getElementById("provider-translate-model");
 const providerTranscribeModel = document.getElementById("provider-transcribe-model");
 const providerApiKey = document.getElementById("provider-api-key");
@@ -47,7 +46,6 @@ const activateProviderBtn = document.getElementById("activate-provider-btn");
 const deleteProviderBtn = document.getElementById("delete-provider-btn");
 
 const promptForm = document.getElementById("prompt-form");
-const promptImproveSystem = document.getElementById("prompt-improve-system");
 const promptTranslateSystem = document.getElementById("prompt-translate-system");
 const sourceLanguage = document.getElementById("source-language");
 const targetLanguage = document.getElementById("target-language");
@@ -67,8 +65,6 @@ const saveTranscriptionBtn = document.getElementById("save-transcription-btn");
 const whisperModelsContainer = document.getElementById("whisper-models-container");
 
 const DEFAULT_PROMPT_SETTINGS = {
-  improveSystemPrompt:
-    "You are a writing assistant. Rewrite text in clear, concise, natural English. Keep intent and facts unchanged. Return only final text.",
   translateSystemPrompt:
     "You are a translation assistant. Convert text from {source} into clear, concise, natural {target} for workplace chat. Preserve names and technical terms. Return only final text.",
   sourceLanguage: "Spanish",
@@ -208,7 +204,6 @@ function buildProviderPayload() {
     name: providerName.value.trim(),
     providerType: providerType.value,
     baseUrl: providerBaseUrl.value.trim(),
-    improveModel: providerImproveModel.value.trim(),
     translateModel: providerTranslateModel.value.trim(),
     transcribeModel: providerTranscribeModel.value.trim(),
   };
@@ -226,7 +221,6 @@ function fillProviderForm(provider) {
   providerName.value = provider.name;
   providerType.value = provider.providerType;
   providerBaseUrl.value = provider.baseUrl;
-  providerImproveModel.value = provider.improveModel;
   providerTranslateModel.value = provider.translateModel;
   providerTranscribeModel.value = provider.transcribeModel || "gpt-4o-mini-transcribe";
   providerApiKey.value = provider.apiKey || "";
@@ -240,7 +234,6 @@ function resetProviderForm() {
   providerName.value = "";
   providerType.value = "openai";
   providerBaseUrl.value = "https://api.openai.com/v1";
-  providerImproveModel.value = "gpt-4.1-mini";
   providerTranslateModel.value = "gpt-4.1-mini";
   providerTranscribeModel.value = "gpt-4o-mini-transcribe";
   providerApiKey.value = "";
@@ -329,7 +322,6 @@ async function saveProvider(event) {
   if (
     !payload.name ||
     !payload.baseUrl ||
-    !payload.improveModel ||
     !payload.translateModel ||
     !payload.transcribeModel
   ) {
@@ -437,7 +429,6 @@ function fillPromptForm(settings) {
   const value = settings || DEFAULT_PROMPT_SETTINGS;
   const modeInstructions = value.modeInstructions || DEFAULT_PROMPT_SETTINGS.modeInstructions;
 
-  promptImproveSystem.value = value.improveSystemPrompt || DEFAULT_PROMPT_SETTINGS.improveSystemPrompt;
   promptTranslateSystem.value =
     value.translateSystemPrompt || DEFAULT_PROMPT_SETTINGS.translateSystemPrompt;
   sourceLanguage.value = value.sourceLanguage || DEFAULT_PROMPT_SETTINGS.sourceLanguage;
@@ -455,7 +446,6 @@ function fillPromptForm(settings) {
 
 function buildPromptPayload() {
   return {
-    improveSystemPrompt: promptImproveSystem.value.trim(),
     translateSystemPrompt: promptTranslateSystem.value.trim(),
     sourceLanguage: sourceLanguage.value.trim() || DEFAULT_PROMPT_SETTINGS.sourceLanguage,
     targetLanguage: targetLanguage.value.trim() || DEFAULT_PROMPT_SETTINGS.targetLanguage,
@@ -479,7 +469,6 @@ async function savePromptSettings(event) {
   event.preventDefault();
   const payload = buildPromptPayload();
   if (
-    !payload.improveSystemPrompt ||
     !payload.translateSystemPrompt ||
     !payload.modeInstructions.simple ||
     !payload.modeInstructions.professional ||

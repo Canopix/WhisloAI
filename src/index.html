@@ -20,8 +20,16 @@
       </header>
 
       <section id="onboarding-panel" class="panel onboarding" hidden>
-        <h2 data-i18n="main.onboarding.title">First-run setup</h2>
-        <p class="hint" data-i18n="main.onboarding.hint">Grant permissions once so dictation and auto-insert work reliably.</p>
+        <div class="onboarding-header">
+          <span class="onboarding-brand-mark" aria-hidden="true">
+            <img src="./app-icon.png" alt="" width="28" height="28" />
+          </span>
+          <div class="onboarding-header-copy">
+            <h2 data-i18n="main.onboarding.title">First-run setup</h2>
+            <p class="hint" data-i18n="main.onboarding.hint">Grant permissions once so dictation and auto-insert work reliably.</p>
+            <p class="hint onboarding-platform" data-i18n="main.onboarding.platform_support">Works on macOS, Windows, and Linux.</p>
+          </div>
+        </div>
 
         <div class="onboarding-steps">
           <div class="onboarding-step">
@@ -42,15 +50,15 @@
           </div>
 
           <div id="onboarding-accessibility-step" class="onboarding-step" hidden>
-            <h3 data-i18n="main.onboarding.accessibility.title">2) Accessibility (macOS)</h3>
-            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required for automatic paste (Cmd+V simulation).</p>
+            <h3 data-i18n="main.onboarding.accessibility.title">2) Input automation access</h3>
+            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required for automatic paste after processing.</p>
             <div class="actions">
               <button
                 id="onboarding-accessibility-btn"
                 type="button"
                 data-i18n="main.onboarding.accessibility.test"
               >
-                Test accessibility access
+                Test input automation access
               </button>
               <button
                 id="onboarding-accessibility-settings-btn"
@@ -78,67 +86,7 @@
       </section>
 
       <div id="main-content">
-        <nav class="tabs" role="tablist" data-i18n-aria-label="main.tabs.aria">
-          <button
-            id="tab-improve"
-            class="tab is-active"
-            data-tab="improve"
-            role="tab"
-            aria-selected="true"
-            aria-controls="panel-improve"
-            data-i18n="main.tab.improve"
-          >
-            Improve
-          </button>
-          <button
-            id="tab-translate"
-            class="tab"
-            data-tab="translate"
-            role="tab"
-            aria-selected="false"
-            aria-controls="panel-translate"
-            data-i18n="main.tab.translate"
-          >
-            Translate
-          </button>
-        </nav>
-
-        <section id="panel-improve" class="panel is-active" data-panel="improve" role="tabpanel" aria-labelledby="tab-improve">
-          <label for="improve-input" data-i18n="main.improve.input.label">English text</label>
-          <textarea
-            id="improve-input"
-            rows="6"
-            data-i18n-placeholder="main.improve.input.placeholder"
-            placeholder="Paste or type your message in English..."
-          ></textarea>
-
-          <div class="row">
-            <label for="improve-style" data-i18n="main.improve.style.label">Style</label>
-            <select id="improve-style">
-              <option value="simple" data-i18n="modes.simple">Simple</option>
-              <option value="professional" data-i18n="modes.professional">Professional</option>
-              <option value="friendly" data-i18n="modes.friendly">Friendly</option>
-              <option value="casual" data-i18n="modes.casual">Casual</option>
-              <option value="formal" data-i18n="modes.formal">Formal</option>
-            </select>
-          </div>
-
-          <div class="actions">
-            <button id="improve-btn" data-i18n="main.improve.action">Improve text</button>
-            <button id="insert-improve-btn" data-i18n="main.improve.insert">Insert in cursor</button>
-            <button id="copy-improve-btn" class="secondary" data-i18n="main.copy_output">Copy output</button>
-          </div>
-
-          <label for="improve-output" data-i18n="main.output.label">Output</label>
-          <textarea
-            id="improve-output"
-            rows="6"
-            data-i18n-placeholder="main.improve.output.placeholder"
-            placeholder="Improved text will appear here..."
-          ></textarea>
-        </section>
-
-        <section id="panel-translate" class="panel" data-panel="translate" role="tabpanel" aria-labelledby="tab-translate">
+        <section id="panel-translate" class="panel is-active" data-panel="translate">
           <div class="actions">
             <button id="record-audio-btn" type="button" class="audio-control">
               <span class="btn-icon" aria-hidden="true">
@@ -177,7 +125,7 @@
           ></textarea>
 
           <div class="row">
-            <label for="translate-style" data-i18n="main.improve.style.label">Style</label>
+            <label for="translate-style" data-i18n="main.translate.style.label">Style</label>
             <select id="translate-style">
               <option value="simple" data-i18n="modes.simple">Simple</option>
               <option value="professional" data-i18n="modes.professional">Professional</option>
