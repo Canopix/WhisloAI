@@ -20,12 +20,20 @@ jobs:
         include:
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
+            macosx_deployment_target: "11.0"
+            ggml_cpu_arm_arch: "armv8.2-a+dotprod"
           - platform: macos-15-intel
             args: "--target x86_64-apple-darwin"
+            macosx_deployment_target: "10.15"
+            ggml_cpu_arm_arch: ""
           - platform: ubuntu-22.04
             args: ""
+            macosx_deployment_target: ""
+            ggml_cpu_arm_arch: ""
           - platform: windows-latest
             args: ""
+            macosx_deployment_target: ""
+            ggml_cpu_arm_arch: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -59,6 +67,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
+          CMAKE_OSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
+          GGML_CPU_ARM_ARCH: ${{ matrix.ggml_cpu_arm_arch }}
+          GGML_NATIVE: "OFF"
+          GGML_CPU_ALL_VARIANTS: "OFF"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: WhisloAI ${{ github.ref_name }}
