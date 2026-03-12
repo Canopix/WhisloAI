@@ -15,31 +15,35 @@ concurrency:
 jobs:
   build-and-release:
     environment: Prod
-    timeout-minutes: 120
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
+            timeout_minutes: 300
             macosx_deployment_target: "11.0"
             ggml_cpu_arm_arch: "armv8.2-a+dotprod"
             cflags: "-march=armv8.2-a+dotprod -U__ARM_FEATURE_MATMUL_INT8"
             cxxflags: "-march=armv8.2-a+dotprod -U__ARM_FEATURE_MATMUL_INT8"
           - platform: macos-15-intel
             args: "--target x86_64-apple-darwin"
+            timeout_minutes: 300
             macosx_deployment_target: "10.15"
             ggml_cpu_arm_arch: ""
             cflags: ""
             cxxflags: ""
           - platform: ubuntu-22.04
             args: ""
+            timeout_minutes: 120
             macosx_deployment_target: ""
             ggml_cpu_arm_arch: ""
             cflags: ""
             cxxflags: ""
           - platform: windows-latest
             args: "--bundles nsis"
+            timeout_minutes: 120
             macosx_deployment_target: ""
             ggml_cpu_arm_arch: ""
             cflags: ""
@@ -84,6 +88,17 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Cache Rust registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.platform }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-cargo-
 
       - name: Validate macOS signing and notarization secrets
         id: macos-secrets
