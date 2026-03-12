@@ -73,6 +73,7 @@ jobs:
         run: npm ci
 
       - name: Validate macOS signing and notarization secrets
+        id: macos-secrets
         if: startsWith(matrix.platform, 'macos')
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -116,8 +117,10 @@ jobs:
             exit 1
           fi
 
+          echo "has_api_auth=${has_api_auth}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare App Store Connect API key file
-        if: startsWith(matrix.platform, 'macos') && secrets.APPLE_API_KEY != '' && secrets.APPLE_API_ISSUER != '' && secrets.APPLE_API_PRIVATE_KEY != ''
+        if: startsWith(matrix.platform, 'macos') && steps.macos-secrets.outputs.has_api_auth == 'true'
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
