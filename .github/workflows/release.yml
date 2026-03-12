@@ -57,8 +57,20 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (macOS/Linux)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --no-self-update
+          rustup default stable
+
+      - name: Install Rust toolchain (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --profile minimal
+          rustup default stable
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
