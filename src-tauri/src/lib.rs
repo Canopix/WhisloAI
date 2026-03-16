@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::path::BaseDirectory;
@@ -56,6 +56,8 @@ static TRAY_READY: AtomicBool = AtomicBool::new(false);
 static APP_QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 static QUICK_OPEN_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 static UPDATE_CHECK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "macos")]
+static RUNNING_UNDER_ROSETTA: OnceLock<bool> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -3635,6 +3637,36 @@ fn transcribe_with_local_whisper(
     })
 }
 
+fn local_transcription_block_reason(is_macos: bool, is_rosetta_translated: bool) -> Option<&'static str> {
+    if is_macos && is_rosetta_translated {
+        return Some(
+            "Local transcription is not available while WhisloAI is running under Rosetta. Switch to API mode or run the native Apple Silicon build.",
+        );
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn is_running_under_rosetta() -> bool {
+    *RUNNING_UNDER_ROSETTA.get_or_init(|| {
+        let Ok(output) = Command::new("sysctl")
+            .args(["-in", "sysctl.proc_translated"])
+            .output()
+        else {
+            return false;
+        };
+        if !output.status.success() {
+            return false;
+        }
+        String::from_utf8_lossy(&output.stdout).trim() == "1"
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_running_under_rosetta() -> bool {
+    false
+}
+
 #[tauri::command]
 async fn transcribe_audio(
     app: tauri::AppHandle,
@@ -3657,6 +3689,12 @@ async fn transcribe_audio(
     let config = load_config(&app)?;
 
     if config.transcription.mode == "local" {
+        if let Some(reason) =
+            local_transcription_block_reason(cfg!(target_os = "macos"), is_running_under_rosetta())
+        {
+            return Err(reason.to_string());
+        }
+
         if let Some(ref path) = config.transcription.local_model_path {
             if std::path::Path::new(path).exists() {
                 #[cfg(feature = "local-transcription")]
@@ -3967,12 +4005,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
+
+            if let Ok(log_dir) = app.path().app_log_dir() {
+                log::info!("WhisloAI logs directory: {}", log_dir.display());
             }
 
             if let Err(error) = setup_tray_icon(app.handle()) {
@@ -4042,8 +4082,9 @@ pub fn run() {
 mod tests {
     use super::{
         download_progress_percent, local_prefers_openai_chat_endpoint, logical_to_physical,
-        non_empty_trimmed, normalize_anchor_behavior, normalize_provider_base_url, point_in_rect,
-        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
+        local_transcription_block_reason, non_empty_trimmed, normalize_anchor_behavior,
+        normalize_provider_base_url, point_in_rect, provider_endpoint, sanitize_scale_factor,
+        scale_for_logical_point_in_rects,
     };
 
     #[test]
@@ -4168,5 +4209,12 @@ mod tests {
         assert!(!local_prefers_openai_chat_endpoint(
             "http://localhost:1234/api"
         ));
+    }
+
+    #[test]
+    fn local_transcription_guard_blocks_rosetta_on_macos() {
+        assert!(local_transcription_block_reason(true, true).is_some());
+        assert!(local_transcription_block_reason(true, false).is_none());
+        assert!(local_transcription_block_reason(false, true).is_none());
     }
 }
