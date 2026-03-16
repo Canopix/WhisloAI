@@ -13,7 +13,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::path::BaseDirectory;
 use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_updater::UpdaterExt;
 
 const KEYRING_SERVICE: &str = "whisloai";
 const QUICK_WINDOW_WIDTH_COMPACT: f64 = 252.0;
@@ -23,6 +25,7 @@ const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
 const TRAY_ICON_ID: &str = "whisloai-tray";
 const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
 const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
+const TRAY_MENU_CHECK_UPDATES: &str = "tray-check-updates";
 const TRAY_MENU_QUIT: &str = "tray-quit";
 const SUPPORTED_STYLE_MODES: [&str; 5] = ["simple", "professional", "friendly", "casual", "formal"];
 const INPUT_TARGET_TTL_MS: u128 = 90_000;
@@ -52,6 +55,7 @@ static SETTINGS_WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static TRAY_READY: AtomicBool = AtomicBool::new(false);
 static APP_QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 static QUICK_OPEN_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
+static UPDATE_CHECK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -2496,10 +2500,117 @@ fn settings_webview_url(cache_bust: bool) -> Result<tauri::WebviewUrl, String> {
     Ok(tauri::WebviewUrl::App("settings.html".into()))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UpdateCheckTrigger {
+    Startup,
+    TrayMenu,
+}
+
+impl UpdateCheckTrigger {
+    fn is_user_initiated(self) -> bool {
+        matches!(self, Self::TrayMenu)
+    }
+}
+
+async fn check_for_update_with_dialog(
+    app: tauri::AppHandle,
+    trigger: UpdateCheckTrigger,
+) -> Result<(), String> {
+    let updater = app
+        .updater()
+        .map_err(|error| format!("Could not initialize updater: {error}"))?;
+
+    let update = updater
+        .check()
+        .await
+        .map_err(|error| format!("Could not check for updates: {error}"))?;
+
+    let Some(update) = update else {
+        if trigger.is_user_initiated() {
+            app.dialog()
+                .message("WhisloAI is up to date.")
+                .title("WhisloAI Updates")
+                .kind(MessageDialogKind::Info)
+                .buttons(MessageDialogButtons::Ok)
+                .show(|_| {});
+        }
+        return Ok(());
+    };
+
+    let should_install = app
+        .dialog()
+        .message(format!(
+            "A new version is available.\n\nCurrent: {}\nLatest: {}\n\nInstall now?",
+            update.current_version, update.version
+        ))
+        .title("Update available")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Install now".to_string(),
+            "Later".to_string(),
+        ))
+        .blocking_show();
+
+    if !should_install {
+        return Ok(());
+    }
+
+    update
+        .download_and_install(
+            |chunk_len, content_len| {
+                if let Some(total) = content_len {
+                    log::info!(
+                        "Updater download progress: {chunk_len} bytes downloaded (total: {total})"
+                    );
+                } else {
+                    log::info!("Updater downloaded chunk: {chunk_len} bytes");
+                }
+            },
+            || {
+                log::info!("Updater download completed. Installing package.");
+            },
+        )
+        .await
+        .map_err(|error| format!("Could not install update: {error}"))?;
+
+    app.restart();
+}
+
+fn start_background_update_check(app: tauri::AppHandle, trigger: UpdateCheckTrigger) {
+    if UPDATE_CHECK_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+        if trigger.is_user_initiated() {
+            app.dialog()
+                .message("An update check is already in progress.")
+                .title("WhisloAI Updates")
+                .kind(MessageDialogKind::Info)
+                .buttons(MessageDialogButtons::Ok)
+                .show(|_| {});
+        }
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = check_for_update_with_dialog(app.clone(), trigger).await {
+            log::warn!("Update check failed: {error}");
+            if trigger.is_user_initiated() {
+                app.dialog()
+                    .message(format!("Could not check for updates.\n\n{}", error.trim()))
+                    .title("WhisloAI Updates")
+                    .kind(MessageDialogKind::Error)
+                    .buttons(MessageDialogButtons::Ok)
+                    .show(|_| {});
+            }
+        }
+
+        UPDATE_CHECK_IN_FLIGHT.store(false, Ordering::SeqCst);
+    });
+}
+
 fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
     let tray_menu = tauri::menu::MenuBuilder::new(app)
         .text(TRAY_MENU_OPEN_APP, "Open WhisloAI")
         .text(TRAY_MENU_OPEN_SETTINGS, "Settings")
+        .text(TRAY_MENU_CHECK_UPDATES, "Check for updates")
         .separator()
         .text(TRAY_MENU_QUIT, "Quit")
         .build()
@@ -2520,6 +2631,9 @@ fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
                 if let Err(error) = open_settings_window(app.clone()) {
                     log::warn!("Tray action 'open settings' failed: {error}");
                 }
+            }
+            TRAY_MENU_CHECK_UPDATES => {
+                start_background_update_check(app.clone(), UpdateCheckTrigger::TrayMenu);
             }
             TRAY_MENU_QUIT => {
                 APP_QUIT_REQUESTED.store(true, Ordering::SeqCst);
@@ -2753,8 +2867,6 @@ async fn download_whisper_model(app: tauri::AppHandle, model_id: String) -> Resu
 
 #[tauri::command]
 async fn pick_whisper_models_dir(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-
     let initial_dir = load_config(&app)
         .ok()
         .and_then(|config| config.transcription.local_models_dir)
@@ -3811,6 +3923,7 @@ async fn translate_text(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PendingQuickAction::default())
         .manage(LastExternalAppBundle::default())
         .manage(LastAnchorPosition::default())
@@ -3878,6 +3991,8 @@ pub fn run() {
             } else {
                 show_main_window_for_onboarding(app.handle());
             }
+
+            start_background_update_check(app.handle().clone(), UpdateCheckTrigger::Startup);
 
             Ok(())
         })

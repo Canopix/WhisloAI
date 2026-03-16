@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.3"
+version = "0.1.4"
 description = "WhisloAI desktop app"
 authors = ["you"]
 license = ""
@@ -28,6 +28,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-log = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 symphonia = { version = "0.5", default-features = false, features = ["all"], optional = true }
 whisper-rs = { version = "0.15", default-features = false, features = ["log_backend"], optional = true }
 

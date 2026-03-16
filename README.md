@@ -89,7 +89,10 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-4. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS, Windows, and Linux, then attaches them to a GitHub Release.
+4. Configure updater signing secrets in GitHub repository settings:
+   - `TAURI_SIGNING_PRIVATE_KEY` (content of your updater private key)
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional, only if your key has a password)
+5. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS, Windows, and Linux, signs updater assets, and attaches them to a GitHub Release.
 
 ## Usage
 

@@ -180,6 +180,8 @@ jobs:
           CXXFLAGS: ${{ matrix.cxxflags }}
           CXXFLAGS_aarch64_apple_darwin: ${{ matrix.cxxflags }}
           CMAKE_CXX_FLAGS: ${{ matrix.cxxflags }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
