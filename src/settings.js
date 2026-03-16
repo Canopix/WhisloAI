@@ -36,6 +36,12 @@ const anchorBehaviorToggleEls = Array.from(document.querySelectorAll(".anchor-be
 const anchorGifContextualEl = document.getElementById("anchor-gif-contextual");
 const anchorGifFloatingEl = document.getElementById("anchor-gif-floating");
 const creatorProfileLink = document.getElementById("creator-profile-link");
+const permissionsMicrophoneStatusEl = document.getElementById("permissions-microphone-status");
+const permissionsAccessibilityStatusEl = document.getElementById("permissions-accessibility-status");
+const permissionsOpenMicrophoneBtn = document.getElementById("permissions-open-microphone-btn");
+const permissionsOpenAccessibilityBtn = document.getElementById("permissions-open-accessibility-btn");
+const permissionsCheckMicrophoneBtn = document.getElementById("permissions-check-microphone-btn");
+const permissionsCheckAccessibilityBtn = document.getElementById("permissions-check-accessibility-btn");
 
 const providersList = document.getElementById("providers-list");
 const providerForm = document.getElementById("provider-form");
@@ -217,6 +223,111 @@ async function openExternalUrl(url) {
     await invoke("open_external_url", { url: value });
   } catch (_) {
     window.open(value, "_blank", "noopener");
+  }
+}
+
+function setPermissionInlineStatus(statusEl, key, tone = "neutral", rowState = "pending") {
+  if (!statusEl) {
+    return;
+  }
+  statusEl.dataset.tone = tone;
+  statusEl.dataset.i18n = key;
+  statusEl.textContent = t(key);
+  const row = statusEl.closest(".permissions-row");
+  if (row) {
+    row.dataset.state = rowState;
+  }
+}
+
+async function openPermissionSettingsFromSettings(permission, statusEl) {
+  if (!invoke) {
+    setStatusKey("settings.status.app_not_ready", "error");
+    return;
+  }
+  try {
+    await invoke("open_permission_settings", { permission });
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.permissions.status.settings_opened",
+      "neutral",
+      "pending",
+    );
+    setStatusKey("settings.permissions.status.settings_opened", "neutral");
+  } catch (error) {
+    setStatus(normalizeError(error), "error");
+  }
+}
+
+async function checkMicrophonePermissionFromSettings(statusEl) {
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+    setPermissionInlineStatus(
+      statusEl,
+      "main.status.recording_permission_unavailable",
+      "error",
+      "action_required",
+    );
+    setStatusKey("main.status.recording_permission_unavailable", "error");
+    return;
+  }
+
+  setPermissionInlineStatus(
+    statusEl,
+    "settings.status.checking_microphone_permission",
+    "loading",
+    "checking",
+  );
+  setStatusKey("settings.status.checking_microphone_permission", "loading");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.microphone_permission_ready_restart",
+      "success",
+      "ready",
+    );
+    setStatusKey("settings.status.microphone_permission_ready_restart", "success");
+  } catch (_) {
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.microphone_permission_denied",
+      "error",
+      "action_required",
+    );
+    setStatusKey("settings.status.microphone_permission_denied", "error");
+  }
+}
+
+async function checkAccessibilityPermissionFromSettings(statusEl) {
+  if (!invoke) {
+    setStatusKey("settings.status.app_not_ready", "error");
+    return;
+  }
+
+  setPermissionInlineStatus(
+    statusEl,
+    "settings.status.checking_accessibility_permission",
+    "loading",
+    "checking",
+  );
+  setStatusKey("settings.status.checking_accessibility_permission", "loading");
+  try {
+    await invoke("probe_auto_insert_permission");
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.accessibility_permission_ready_restart",
+      "success",
+      "ready",
+    );
+    setStatusKey("settings.status.accessibility_permission_ready_restart", "success");
+  } catch (_) {
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.accessibility_permission_missing",
+      "error",
+      "action_required",
+    );
+    setStatusKey("settings.status.accessibility_permission_missing", "error");
   }
 }
 
@@ -778,6 +889,30 @@ if (creatorProfileLink) {
   });
 }
 
+if (permissionsOpenMicrophoneBtn) {
+  permissionsOpenMicrophoneBtn.addEventListener("click", async () => {
+    await openPermissionSettingsFromSettings("microphone", permissionsMicrophoneStatusEl);
+  });
+}
+
+if (permissionsOpenAccessibilityBtn) {
+  permissionsOpenAccessibilityBtn.addEventListener("click", async () => {
+    await openPermissionSettingsFromSettings("accessibility", permissionsAccessibilityStatusEl);
+  });
+}
+
+if (permissionsCheckMicrophoneBtn) {
+  permissionsCheckMicrophoneBtn.addEventListener("click", async () => {
+    await checkMicrophonePermissionFromSettings(permissionsMicrophoneStatusEl);
+  });
+}
+
+if (permissionsCheckAccessibilityBtn) {
+  permissionsCheckAccessibilityBtn.addEventListener("click", async () => {
+    await checkAccessibilityPermissionFromSettings(permissionsAccessibilityStatusEl);
+  });
+}
+
 function syncTranscriptionLocalVisibility() {
   transcriptionLocalSection.hidden = transcriptionMode.value !== "local";
 }
@@ -1078,6 +1213,18 @@ async function bootstrap() {
   resetProviderForm();
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
   initializeAnchorBehaviorGifPreviews();
+  setPermissionInlineStatus(
+    permissionsMicrophoneStatusEl,
+    "settings.permissions.status.not_checked",
+    "neutral",
+    "pending",
+  );
+  setPermissionInlineStatus(
+    permissionsAccessibilityStatusEl,
+    "settings.permissions.status.not_checked",
+    "neutral",
+    "pending",
+  );
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
   }

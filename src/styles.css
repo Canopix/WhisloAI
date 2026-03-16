@@ -329,6 +329,90 @@ body {
   color: #355153;
 }
 
+.permissions-restart-hint {
+  color: #265a54;
+  font-weight: 600;
+}
+
+.permissions-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.permissions-row {
+  border: 1px solid #d2e2dc;
+  border-radius: 12px;
+  padding: 10px;
+  background: #f8fcfa;
+  transition:
+    border-color var(--duration-medium) var(--easing-standard),
+    box-shadow var(--duration-medium) var(--easing-standard),
+    background-color var(--duration-medium) var(--easing-standard);
+}
+
+.permissions-row h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #244549;
+}
+
+.permissions-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.permissions-inline-status {
+  margin-top: 8px !important;
+  border: 1px solid #d6e0dc;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+}
+
+.permissions-inline-status[data-tone="neutral"] {
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+
+.permissions-inline-status[data-tone="loading"] {
+  color: var(--state-loading-fg);
+  background: var(--state-loading-bg);
+  border-color: var(--state-loading-border);
+}
+
+.permissions-inline-status[data-tone="success"] {
+  color: var(--state-success-fg);
+  background: var(--state-success-bg);
+  border-color: var(--state-success-border);
+}
+
+.permissions-inline-status[data-tone="error"] {
+  color: var(--state-error-fg);
+  background: var(--state-error-bg);
+  border-color: var(--state-error-border);
+}
+
+.permissions-row[data-state="checking"] {
+  border-color: var(--state-loading-border);
+  background: #f7fbff;
+}
+
+.permissions-row[data-state="ready"] {
+  border-color: var(--state-success-border);
+  box-shadow: 0 0 0 1px rgba(22, 101, 52, 0.14);
+}
+
+.permissions-row[data-state="action_required"] {
+  border-color: var(--state-error-border);
+  box-shadow: 0 0 0 1px rgba(153, 27, 27, 0.12);
+}
+
 .settings-card code {
   font-family: ui-monospace, monospace;
   font-size: 12px;

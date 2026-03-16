@@ -17,7 +17,7 @@
 
       <div class="settings-layout">
         <aside class="settings-nav" role="tablist" data-i18n-aria-label="settings.nav.aria">
-          <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General</button>
+          <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General & Permissions</button>
           <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
           <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
           <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription" data-i18n="settings.nav.transcription">Transcription</button>
@@ -98,6 +98,78 @@
                     </article>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div id="permissions-card" class="settings-card">
+              <h2 data-i18n="settings.permissions.title">Permissions</h2>
+              <p class="hint" data-i18n="settings.permissions.hint">
+                Manage permission checks for microphone and input automation.
+              </p>
+              <p class="hint permissions-restart-hint" data-i18n="settings.permissions.restart_hint">
+                After granting permissions, close WhisloAI completely and reopen it.
+              </p>
+
+              <div class="permissions-grid">
+                <section class="permissions-row">
+                  <h3 data-i18n="settings.permissions.microphone.title">Microphone</h3>
+                  <div class="permissions-actions">
+                    <button
+                      type="button"
+                      id="permissions-open-microphone-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.open_settings"
+                    >
+                      Open system settings
+                    </button>
+                    <button
+                      type="button"
+                      id="permissions-check-microphone-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.check"
+                    >
+                      Check access
+                    </button>
+                  </div>
+                  <p
+                    id="permissions-microphone-status"
+                    class="hint permissions-inline-status"
+                    data-tone="neutral"
+                    data-i18n="settings.permissions.status.not_checked"
+                  >
+                    Not checked yet.
+                  </p>
+                </section>
+
+                <section class="permissions-row">
+                  <h3 data-i18n="settings.permissions.accessibility.title">Input automation (Accessibility)</h3>
+                  <div class="permissions-actions">
+                    <button
+                      type="button"
+                      id="permissions-open-accessibility-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.open_settings"
+                    >
+                      Open system settings
+                    </button>
+                    <button
+                      type="button"
+                      id="permissions-check-accessibility-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.check"
+                    >
+                      Check access
+                    </button>
+                  </div>
+                  <p
+                    id="permissions-accessibility-status"
+                    class="hint permissions-inline-status"
+                    data-tone="neutral"
+                    data-i18n="settings.permissions.status.not_checked"
+                  >
+                    Not checked yet.
+                  </p>
+                </section>
               </div>
             </div>
 
