@@ -39,8 +39,8 @@ jobs:
             timeout_minutes: 120
             macosx_deployment_target: ""
             ggml_cpu_arm_arch: ""
-            cflags: ""
-            cxxflags: ""
+            cflags: "-fPIC"
+            cxxflags: "-fPIC"
           - platform: windows-latest
             args: "--bundles nsis"
             timeout_minutes: 120
