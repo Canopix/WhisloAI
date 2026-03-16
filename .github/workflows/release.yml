@@ -1,0 +1,196 @@
+name: Release Desktop Builds
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    environment: Prod
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            timeout_minutes: 300
+            macosx_deployment_target: "11.0"
+            ggml_cpu_arm_arch: "armv8.2-a+dotprod"
+            cflags: "-march=armv8.2-a+dotprod -U__ARM_FEATURE_MATMUL_INT8"
+            cxxflags: "-march=armv8.2-a+dotprod -U__ARM_FEATURE_MATMUL_INT8"
+          - platform: macos-15-intel
+            args: "--target x86_64-apple-darwin"
+            timeout_minutes: 300
+            macosx_deployment_target: "10.15"
+            ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
+          - platform: ubuntu-22.04
+            args: ""
+            timeout_minutes: 120
+            macosx_deployment_target: ""
+            ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
+          - platform: windows-latest
+            args: "--bundles nsis"
+            timeout_minutes: 120
+            macosx_deployment_target: ""
+            ggml_cpu_arm_arch: ""
+            cflags: ""
+            cxxflags: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Rust toolchain (macOS/Linux)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --no-self-update
+          rustup default stable
+
+      - name: Install Rust toolchain (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Cache Rust registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.platform }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-cargo-
+
+      - name: Validate macOS signing and notarization secrets
+        id: macos-secrets
+        if: startsWith(matrix.platform, 'macos')
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          missing_signing=()
+          signing_vars=(
+            APPLE_CERTIFICATE
+            APPLE_CERTIFICATE_PASSWORD
+          )
+
+          for var in "${signing_vars[@]}"; do
+            if [ -z "${!var}" ]; then
+              missing_signing+=("${var}")
+            fi
+          done
+
+          resolved_team_id="${APPLE_TEAM_ID}"
+          if [ -z "${resolved_team_id}" ] && [ -n "${APPLE_SIGNING_IDENTITY}" ]; then
+            # Example: Developer ID Application: Emanuel Canova (3U4584X86T)
+            resolved_team_id="$(printf '%s' "${APPLE_SIGNING_IDENTITY}" | sed -n 's/.*(\([A-Z0-9]\{3,\}\)).*/\1/p')"
+          fi
+
+          if [ -z "${resolved_team_id}" ]; then
+            missing_signing+=("APPLE_TEAM_ID (or parseable APPLE_SIGNING_IDENTITY)")
+          fi
+
+          if [ "${#missing_signing[@]}" -gt 0 ]; then
+            echo "::error::Missing required macOS signing secrets: ${missing_signing[*]}"
+            exit 1
+          fi
+
+          has_api_auth=false
+          if [ -n "${APPLE_API_KEY}" ] && [ -n "${APPLE_API_ISSUER}" ] && [ -n "${APPLE_API_PRIVATE_KEY}" ]; then
+            has_api_auth=true
+          fi
+
+          if [ "${has_api_auth}" = false ]; then
+            echo "::error::Missing notarization auth. Provide APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_PRIVATE_KEY."
+            exit 1
+          fi
+
+          echo "apple_team_id=${resolved_team_id}" >> "$GITHUB_OUTPUT"
+          echo "has_api_auth=${has_api_auth}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare App Store Connect API key file
+        if: startsWith(matrix.platform, 'macos') && steps.macos-secrets.outputs.has_api_auth == 'true'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          key_dir="$RUNNER_TEMP/appstoreconnect-private-keys"
+          key_path="$key_dir/AuthKey_${APPLE_API_KEY}.p8"
+          mkdir -p "$key_dir"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Build and upload release artifacts
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
+          CMAKE_OSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
+          CMAKE_GGML_CPU_ARM_ARCH: ${{ matrix.ggml_cpu_arm_arch }}
+          CMAKE_GGML_NATIVE: "OFF"
+          CMAKE_GGML_CPU_ALL_VARIANTS: "OFF"
+          CFLAGS: ${{ matrix.cflags }}
+          CFLAGS_aarch64_apple_darwin: ${{ matrix.cflags }}
+          CMAKE_C_FLAGS: ${{ matrix.cflags }}
+          CXXFLAGS: ${{ matrix.cxxflags }}
+          CXXFLAGS_aarch64_apple_darwin: ${{ matrix.cxxflags }}
+          CMAKE_CXX_FLAGS: ${{ matrix.cxxflags }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ steps.macos-secrets.outputs.apple_team_id }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: WhisloAI ${{ github.ref_name }}
+          releaseBody: Automated build for ${{ github.ref_name }}.
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.args }}

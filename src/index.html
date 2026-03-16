@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="main.title">WhisloAI</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app compact-app">
+      <header class="topbar topbar-compact">
+        <div>
+          <h1 data-i18n="app.name">WhisloAI</h1>
+          <p data-i18n="main.header.subtitle">Write clearly in English from any app.</p>
+        </div>
+        <div class="actions compact-header-actions">
+          <button id="open-widget-btn" class="secondary" type="button" data-i18n="main.action.widget">Widget</button>
+          <button id="open-settings-btn" class="secondary" type="button" data-i18n="main.action.settings">Settings</button>
+        </div>
+      </header>
+
+      <section id="onboarding-panel" class="panel onboarding" hidden>
+        <div class="onboarding-header">
+          <span class="onboarding-brand-mark" aria-hidden="true">
+            <img src="./app-icon.png" alt="" width="28" height="28" />
+          </span>
+          <div class="onboarding-header-copy">
+            <h2 data-i18n="main.onboarding.title">First-run setup</h2>
+            <p class="hint" data-i18n="main.onboarding.hint">Grant permissions once so dictation and auto-insert work reliably.</p>
+            <p class="hint onboarding-platform" data-i18n="main.onboarding.platform_support">Works on macOS, Windows, and Linux.</p>
+          </div>
+        </div>
+
+        <div class="onboarding-steps">
+          <div id="onboarding-mic-step" class="onboarding-step" data-step="microphone" data-state="pending">
+            <h3 data-i18n="main.onboarding.mic.title">1) Microphone access</h3>
+            <p class="hint" data-i18n="main.onboarding.mic.hint">Required for audio transcription.</p>
+            <p id="onboarding-mic-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+            <div class="actions">
+              <button id="onboarding-mic-btn" type="button" data-i18n="main.onboarding.mic.allow">Allow microphone</button>
+              <button
+                id="onboarding-mic-settings-btn"
+                type="button"
+                class="secondary"
+                data-i18n="main.onboarding.system_settings"
+              >
+                Open system settings
+              </button>
+            </div>
+            <p id="onboarding-mic-status" class="hint onboarding-status" data-tone="neutral" data-i18n="main.onboarding.status.not_checked">Not checked yet.</p>
+          </div>
+
+          <div id="onboarding-accessibility-step" class="onboarding-step" data-step="accessibility" data-state="pending" hidden>
+            <h3 data-i18n="main.onboarding.accessibility.title">2) Input automation access</h3>
+            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required for automatic paste after processing.</p>
+            <p id="onboarding-accessibility-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+            <div class="actions">
+              <button
+                id="onboarding-accessibility-btn"
+                type="button"
+                data-i18n="main.onboarding.accessibility.test"
+              >
+                Test input automation access
+              </button>
+              <button
+                id="onboarding-accessibility-settings-btn"
+                type="button"
+                class="secondary"
+                data-i18n="main.onboarding.system_settings"
+              >
+                Open system settings
+              </button>
+            </div>
+            <p
+              id="onboarding-accessibility-status"
+              class="hint onboarding-status"
+              data-tone="neutral"
+              data-i18n="main.onboarding.status.not_checked"
+            >
+              Not checked yet.
+            </p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="onboarding-finish-btn" type="button" data-i18n="main.onboarding.finish">Finish setup</button>
+          <button id="onboarding-skip-btn" type="button" class="secondary" data-i18n="main.onboarding.skip">Skip for now</button>
+        </div>
+      </section>
+
+      <div id="main-content">
+        <section id="panel-translate" class="panel is-active" data-panel="translate">
+          <div class="actions">
+            <button id="record-audio-btn" type="button" class="audio-control">
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path
+                    d="M12 15.5a4 4 0 0 0 4-4v-5a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4zm7-4a1 1 0 1 0-2 0 5 5 0 1 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21H9.5a1 1 0 1 0 0 2h5a1 1 0 1 0 0-2H13v-2.58A7 7 0 0 0 19 11.5z"
+                  />
+                </svg>
+              </span>
+              <span data-i18n="main.record.start">Record</span>
+            </button>
+            <button id="stop-audio-btn" type="button" class="secondary audio-control" disabled>
+              <span class="btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M7 7h10v10H7z" />
+                </svg>
+              </span>
+              <span data-i18n="main.record.stop">Stop & transcribe</span>
+            </button>
+          </div>
+          <div id="recording-visualizer" class="recording-visualizer" hidden>
+            <span class="recording-pill">
+              <span class="recording-dot" aria-hidden="true"></span>
+              <span data-i18n="main.recording.badge">Recording</span>
+            </span>
+            <div id="recording-waveform" class="recording-waveform" aria-hidden="true"></div>
+          </div>
+          <p id="recording-state" class="hint" data-i18n="main.recording.state.idle">Microphone idle.</p>
+
+          <label for="translate-input" data-i18n="main.translate.input.label">Source language text</label>
+          <textarea
+            id="translate-input"
+            rows="6"
+            data-i18n-placeholder="main.translate.input.placeholder"
+            placeholder="Write or paste text in the source language (configure in Settings)..."
+          ></textarea>
+
+          <div class="row">
+            <label for="translate-style" data-i18n="main.translate.style.label">Style</label>
+            <select id="translate-style">
+              <option value="simple" data-i18n="modes.simple">Simple</option>
+              <option value="professional" data-i18n="modes.professional">Professional</option>
+              <option value="friendly" data-i18n="modes.friendly">Friendly</option>
+              <option value="casual" data-i18n="modes.casual">Casual</option>
+              <option value="formal" data-i18n="modes.formal">Formal</option>
+            </select>
+          </div>
+
+          <div class="actions">
+            <button id="translate-btn" data-i18n="main.translate.action">Translate</button>
+            <button id="insert-translate-btn" data-i18n="main.translate.insert">Insert at cursor</button>
+            <button id="copy-translate-btn" class="secondary" data-i18n="main.copy_output">Copy output</button>
+          </div>
+
+          <label for="translate-output" data-i18n="main.output.label">Output</label>
+          <textarea
+            id="translate-output"
+            rows="6"
+            data-i18n-placeholder="main.translate.output.placeholder"
+            placeholder="Translated text will appear here..."
+          ></textarea>
+        </section>
+
+        <footer id="status" class="status" data-tone="neutral" aria-live="polite" aria-atomic="true" data-i18n="main.status.ready">Ready</footer>
+      </div>
+    </main>
+
+    <script src="./i18n.js"></script>
+    <script src="./errors.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

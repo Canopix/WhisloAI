@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.DS_Store
+
+# Next.js / otros (no usados por Tauri)
+out/
+.next/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# Local release artifacts
+local-artifacts/
+release-local/
+
+# Local settings
+*.log

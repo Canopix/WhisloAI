@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" class="overlay-html">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="widget.title">WhisloAI Quick</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="quick-body">
+    <main id="quick-shell" class="quick-shell">
+      <div class="quick-toolbar" role="toolbar" data-i18n-aria-label="widget.toolbar.aria">
+        <span class="quick-app-pill" aria-hidden="true">
+          <img src="./anchor-icon.png" alt="WhisloAI" width="18" height="18" class="quick-app-icon" />
+        </span>
+
+        <button
+          id="quick-translate-selection-btn"
+          type="button"
+          class="quick-tool-btn"
+          data-i18n-aria-label="widget.translate.aria"
+          data-i18n-title="widget.translate.title"
+        >
+          <span id="quick-translate-selection-icon" class="quick-tool-icon" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="languages" aria-hidden="true"></i>
+          </span>
+          <span id="quick-translate-selection-spinner" class="quick-dictate-spinner" hidden aria-hidden="true"></span>
+        </button>
+
+        <button
+          id="quick-improve-selection-btn"
+          type="button"
+          class="quick-tool-btn"
+          data-i18n-aria-label="widget.improve.aria"
+          data-i18n-title="widget.improve.title"
+        >
+          <span id="quick-improve-selection-icon" class="quick-tool-icon" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="sparkles" aria-hidden="true"></i>
+          </span>
+          <span id="quick-improve-selection-spinner" class="quick-dictate-spinner" hidden aria-hidden="true"></span>
+        </button>
+
+        <button
+          id="quick-dictate-btn"
+          type="button"
+          class="quick-tool-btn"
+          data-i18n-aria-label="widget.dictate.start.aria"
+          data-i18n-title="widget.dictate.start.title"
+        >
+          <span id="quick-dictate-icon" class="quick-tool-icon" aria-hidden="true">
+            <i id="quick-dictate-icon-glyph" class="icon-lucide" data-lucide="mic" aria-hidden="true"></i>
+          </span>
+          <span id="quick-dictate-spinner" class="quick-dictate-spinner" hidden aria-hidden="true"></span>
+        </button>
+        <span id="quick-dictate-wave-wrap" class="quick-dictate-wave-wrap" hidden>
+          <button
+            id="quick-stop-btn"
+            type="button"
+            class="quick-stop-btn"
+            data-i18n-aria-label="widget.stopRecording.aria"
+            data-i18n-title="widget.stopRecording.title"
+          >
+            <span class="quick-stop-square"></span>
+          </button>
+          <span class="quick-recording-dot" aria-hidden="true"></span>
+          <span id="quick-recording-waveform" class="quick-recording-waveform" aria-hidden="true"></span>
+        </span>
+
+        <button
+          id="quick-settings-btn"
+          type="button"
+          class="quick-tool-btn"
+          data-i18n-aria-label="widget.settings.aria"
+          data-i18n-title="widget.settings.title"
+        >
+          <i class="icon-lucide" data-lucide="settings-2" aria-hidden="true"></i>
+        </button>
+
+        <button
+          id="quick-close-btn"
+          type="button"
+          class="quick-tool-btn quick-close-btn"
+          data-i18n-aria-label="widget.close.default.aria"
+          data-i18n-title="widget.close.default.title"
+        >
+          <i class="icon-lucide" data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </div>
+    </main>
+
+    <script src="./vendor/lucide.min.js"></script>
+    <script src="./i18n.js"></script>
+    <script src="./errors.js"></script>
+    <script src="./widget.js"></script>
+  </body>
+</html>

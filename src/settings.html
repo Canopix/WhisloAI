@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="settings.title">WhisloAI Settings</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="settings-body">
+    <main class="settings-shell">
+      <header class="settings-hero">
+        <h1 data-i18n="settings.hero.title">Settings</h1>
+        <p data-i18n="settings.hero.subtitle">Configure your provider once, test it instantly.</p>
+      </header>
+
+      <div id="status" class="settings-status" data-tone="neutral" aria-live="polite" aria-atomic="true" data-i18n="settings.status.ready">Ready.</div>
+
+      <div class="settings-layout">
+        <aside class="settings-nav" role="tablist" data-i18n-aria-label="settings.nav.aria">
+          <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General</button>
+          <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
+          <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
+          <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription" data-i18n="settings.nav.transcription">Transcription</button>
+        </aside>
+
+        <section class="settings-content">
+          <section id="view-general" class="settings-view" data-view="general" role="tabpanel" aria-labelledby="nav-general">
+            <div class="settings-card">
+              <h2 data-i18n="settings.general.title">General</h2>
+              <p class="hint" data-i18n="settings.general.hint">Choose the interface language for widget, settings, and main app.</p>
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="ui-language-preference" data-i18n="settings.general.language.label">Interface language</label>
+                  <select id="ui-language-preference">
+                    <option value="system" data-i18n="settings.general.language.system">System</option>
+                    <option value="en" data-i18n="settings.general.language.en">English</option>
+                    <option value="es" data-i18n="settings.general.language.es">Español</option>
+                  </select>
+                </div>
+
+                <div class="field field-full">
+                  <label for="anchor-behavior" data-i18n="settings.general.anchor_behavior.label">Anchor behavior</label>
+                  <select id="anchor-behavior" class="settings-visually-hidden-control" aria-hidden="true" tabindex="-1">
+                    <option value="contextual" data-i18n="settings.general.anchor_behavior.contextual">
+                      Contextual (near focused inputs)
+                    </option>
+                    <option value="floating" data-i18n="settings.general.anchor_behavior.floating">
+                      Floating (movable, on demand)
+                    </option>
+                  </select>
+                  <div class="anchor-behavior-options" role="radiogroup" data-i18n-aria-label="settings.general.anchor_behavior.label">
+                    <article class="anchor-behavior-option" data-anchor-behavior-option="contextual">
+                      <button
+                        type="button"
+                        class="anchor-behavior-option-toggle"
+                        data-anchor-behavior-option="contextual"
+                        role="radio"
+                        aria-checked="false"
+                        tabindex="0"
+                      >
+                        <span class="anchor-behavior-option-title" data-i18n="settings.general.anchor_behavior.contextual">
+                          Contextual (near focused inputs)
+                        </span>
+                        <span class="anchor-behavior-option-copy" data-i18n="settings.general.anchor_behavior.contextual_copy">
+                          Anchor appears near the active input.
+                        </span>
+                      </button>
+                      <div class="anchor-behavior-gif-slot">
+                        <img id="anchor-gif-contextual" class="anchor-behavior-gif" alt="Contextual behavior preview" hidden />
+                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.gif_placeholder">
+                          GIF preview space
+                        </span>
+                      </div>
+                    </article>
+
+                    <article class="anchor-behavior-option" data-anchor-behavior-option="floating">
+                      <button
+                        type="button"
+                        class="anchor-behavior-option-toggle"
+                        data-anchor-behavior-option="floating"
+                        role="radio"
+                        aria-checked="false"
+                        tabindex="-1"
+                      >
+                        <span class="anchor-behavior-option-title" data-i18n="settings.general.anchor_behavior.floating">
+                          Floating (movable, on demand)
+                        </span>
+                        <span class="anchor-behavior-option-copy" data-i18n="settings.general.anchor_behavior.floating_copy">
+                          Anchor stays on screen and can be dragged.
+                        </span>
+                      </button>
+                      <div class="anchor-behavior-gif-slot">
+                        <img id="anchor-gif-floating" class="anchor-behavior-gif" alt="Floating behavior preview" hidden />
+                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.gif_placeholder">
+                          GIF preview space
+                        </span>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card creator-card">
+              <h2 data-i18n="settings.creator.title">Creator</h2>
+              <p class="hint" data-i18n="settings.creator.thanks">Thanks for using WhisloAI.</p>
+              <p class="hint">
+                <span data-i18n="settings.creator.follow">Follow the build journey on X:</span>
+                <a id="creator-profile-link" href="https://x.com/emanuel_build" target="_blank" rel="noopener">@emanuel_build</a>
+              </p>
+              <p class="hint" data-i18n="settings.creator.support">
+                If you enjoy the app or have questions, follow me on X and open an issue in the project repository.
+              </p>
+            </div>
+          </section>
+
+          <section id="view-providers" class="settings-view is-active" data-view="providers" role="tabpanel" aria-labelledby="nav-providers">
+            <div class="settings-grid">
+              <aside class="settings-panel providers-panel">
+                <div class="providers-header">
+                  <h2 data-i18n="settings.providers.saved.title">Saved Providers</h2>
+                  <button type="button" id="new-provider-btn" class="settings-btn-secondary" data-i18n="settings.providers.new">New provider</button>
+                </div>
+                <p id="providers-summary" class="providers-summary" data-i18n="settings.providers.loading">Loading providers...</p>
+                <ul id="providers-list" class="providers-cards"></ul>
+              </aside>
+
+              <form id="provider-form" class="settings-card">
+                <h2 data-i18n="settings.provider.details.title">Provider Details</h2>
+                <p class="hint" data-i18n="settings.provider.details.hint">Test first. Save only when the connection is valid.</p>
+                <input id="provider-id" type="hidden" />
+
+                <div class="settings-form-grid">
+                  <div class="field">
+                    <label for="provider-name" data-i18n="settings.field.name">Name</label>
+                    <input id="provider-name" type="text" placeholder="OpenAI" required />
+                  </div>
+
+                  <div class="field">
+                    <label for="provider-type" data-i18n="settings.field.type">Type</label>
+                    <select id="provider-type">
+                      <option value="openai" data-i18n="settings.field.type.openai">OpenAI</option>
+                      <option value="openai-compatible" data-i18n="settings.field.type.openai_compatible">OpenAI-compatible</option>
+                    </select>
+                  </div>
+
+                  <div class="field field-full">
+                    <label for="provider-base-url" data-i18n="settings.field.base_url">Base URL</label>
+                    <input id="provider-base-url" type="url" placeholder="https://api.openai.com/v1" required />
+                  </div>
+
+                  <div class="field" id="provider-translate-model-field">
+                    <label for="provider-translate-model" data-i18n="settings.field.translate_model">Translate model</label>
+                    <input id="provider-translate-model" type="text" placeholder="gpt-4.1-mini" required />
+                  </div>
+
+                  <div class="field" id="provider-transcribe-model-field">
+                    <label for="provider-transcribe-model" data-i18n="settings.field.transcribe_model">Transcribe model</label>
+                    <input
+                      id="provider-transcribe-model"
+                      type="text"
+                      placeholder="gpt-4o-mini-transcribe"
+                      required
+                    />
+                  </div>
+
+                  <div class="field" id="provider-api-key-field">
+                    <label for="provider-api-key" data-i18n="settings.field.api_key">API key</label>
+                    <input id="provider-api-key" type="password" placeholder="sk-..." autocomplete="off" />
+                    <small class="field-hint" data-i18n="settings.field.api_key_hint">
+                      Stored locally. Leave unchanged to keep the current key.
+                    </small>
+                  </div>
+                </div>
+
+                <div class="settings-actions">
+                  <button type="button" id="delete-provider-btn" class="settings-btn-danger" data-i18n="settings.action.delete_provider">Delete provider</button>
+                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.set_active">Set active</button>
+                  <button type="button" id="test-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.test_connection">
+                    Test connection (no save)
+                  </button>
+                  <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <section id="view-prompts" class="settings-view" data-view="prompts" role="tabpanel" aria-labelledby="nav-prompts">
+            <form id="prompt-form" class="settings-card">
+              <h2 data-i18n="settings.prompts.title">Prompts & Modes</h2>
+              <p class="hint" data-i18n="settings.prompts.hint">Adjust writing behavior and translation tone. Stored locally in app settings.</p>
+
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.language_conversion">Language conversion</h3>
+              <p class="hint" data-i18n="settings.prompts.language_hint">Configure which languages to convert between. Use {source} and {target} in the translate prompt as placeholders.</p>
+              <div class="settings-form-grid">
+                <div class="field">
+                  <label for="source-language" data-i18n="settings.field.source_language">Source language</label>
+                  <input
+                    id="source-language"
+                    type="text"
+                    data-i18n-placeholder="settings.placeholder.source_language"
+                    placeholder="Spanish"
+                    list="common-languages"
+                  />
+                </div>
+                <div class="field">
+                  <label for="target-language" data-i18n="settings.field.target_language">Target language</label>
+                  <input
+                    id="target-language"
+                    type="text"
+                    data-i18n-placeholder="settings.placeholder.target_language"
+                    placeholder="English"
+                    list="common-languages"
+                  />
+                </div>
+              </div>
+              <datalist id="common-languages">
+                <option value="Spanish"><option value="English"><option value="Portuguese"><option value="French">
+                <option value="German"><option value="Italian"><option value="Japanese"><option value="Chinese">
+              </datalist>
+
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.system">System prompts</h3>
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="prompt-translate-system" data-i18n="settings.field.translate_prompt">Translate system prompt</label>
+                  <textarea
+                    id="prompt-translate-system"
+                    rows="3"
+                    data-i18n-placeholder="settings.placeholder.translate_prompt"
+                    placeholder="Use {source} and {target} as placeholders..."
+                    required
+                  ></textarea>
+                </div>
+              </div>
+
+              <h3 class="settings-subtitle" data-i18n="settings.prompts.writing_modes">Writing modes</h3>
+              <p class="hint" data-i18n="settings.prompts.writing_modes_hint">Each mode has a name, description, and optional emoji used in the widget. Keep it simple: a few clearly defined modes work best.</p>
+
+              <div class="writing-modes-grid">
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">✍️</span>
+                  <div class="field">
+                    <label for="mode-simple" data-i18n="settings.mode.simple.label">Writing</label>
+                    <input id="mode-simple" type="text" data-i18n-placeholder="settings.mode.simple.placeholder" placeholder="Use clear, concise wording..." required />
+                  </div>
+                </div>
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">🧑‍💻</span>
+                  <div class="field">
+                    <label for="mode-professional" data-i18n="settings.mode.professional.label">Developer</label>
+                    <input id="mode-professional" type="text" data-i18n-placeholder="settings.mode.professional.placeholder" placeholder="Polished workplace tone..." required />
+                  </div>
+                </div>
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">📢</span>
+                  <div class="field">
+                    <label for="mode-friendly" data-i18n="settings.mode.friendly.label">Marketing</label>
+                    <input id="mode-friendly" type="text" data-i18n-placeholder="settings.mode.friendly.placeholder" placeholder="Warm, approachable tone..." required />
+                  </div>
+                </div>
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">💬</span>
+                  <div class="field">
+                    <label for="mode-casual" data-i18n="settings.mode.casual.label">Casual</label>
+                    <input id="mode-casual" type="text" data-i18n-placeholder="settings.mode.casual.placeholder" placeholder="Relaxed conversational tone..." required />
+                  </div>
+                </div>
+                <div class="writing-mode-row">
+                  <span class="writing-mode-emoji" aria-hidden="true">🧠</span>
+                  <div class="field">
+                    <label for="mode-formal" data-i18n="settings.mode.formal.label">Thinking / Analysis</label>
+                    <input id="mode-formal" type="text" data-i18n-placeholder="settings.mode.formal.placeholder" placeholder="Formal, respectful tone..." required />
+                  </div>
+                </div>
+                <div class="field writing-mode-default">
+                  <label for="quick-default-mode" data-i18n="settings.quick_mode.label">Widget default mode</label>
+                  <select id="quick-default-mode">
+                    <option value="simple">✍️ Writing</option>
+                    <option value="professional">🧑‍💻 Developer</option>
+                    <option value="friendly">📢 Marketing</option>
+                    <option value="casual">💬 Casual</option>
+                    <option value="formal">🧠 Thinking / Analysis</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="settings-actions">
+                <button type="button" id="reset-prompt-btn" class="settings-btn-secondary" data-i18n="settings.action.reset_defaults">Reset defaults</button>
+                <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_prompts">Save prompts & modes</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="view-transcription" class="settings-view" data-view="transcription" role="tabpanel" aria-labelledby="nav-transcription">
+            <div class="settings-card">
+              <h2 data-i18n="settings.transcription.title">Transcription</h2>
+              <p class="hint" data-i18n="settings.transcription.hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
+
+              <div class="settings-form-grid">
+                <div class="field field-full">
+                  <label for="transcription-mode" data-i18n="settings.transcription.mode">Mode</label>
+                  <select id="transcription-mode">
+                    <option value="api" data-i18n="settings.transcription.mode.api">API (provider)</option>
+                    <option value="local" data-i18n="settings.transcription.mode.local">Local (Whisper)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="transcription-local-section" class="transcription-local-section" hidden>
+                <h3 class="settings-subtitle" data-i18n="settings.transcription.local_model">Local model</h3>
+                <p class="hint">
+                  <span data-i18n="settings.transcription.local_hint">Download a model below. The downloaded model is selected automatically for transcription. Models are from ggerganov/whisper.cpp.</span>
+                  <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.
+                </p>
+
+                <div class="field field-full field-top-spacing">
+                  <label for="local-models-dir" data-i18n="settings.transcription.models_dir">Models folder</label>
+                  <div class="field-with-button">
+                    <input id="local-models-dir" type="text" data-i18n-placeholder="settings.transcription.no_models_dir" placeholder="No folder selected" readonly />
+                    <button type="button" id="pick-models-dir-btn" class="settings-btn-secondary" data-i18n="settings.transcription.select_folder">Select folder...</button>
+                  </div>
+                  <small class="field-hint" data-i18n="settings.transcription.models_dir_hint">Choose and save a folder before downloading models.</small>
+                </div>
+
+                <div class="whisper-models-list">
+                  <p class="field-label" data-i18n="settings.transcription.download">Download model</p>
+                  <div id="whisper-models-container" class="whisper-models-container"></div>
+                  <small class="field-hint" data-i18n="settings.transcription.auto_select_hint">Downloaded models are selected automatically for transcription.</small>
+                </div>
+              </div>
+
+              <div class="settings-actions settings-actions-spacious">
+                <button type="button" id="save-transcription-btn" class="settings-btn-primary" data-i18n="settings.action.save">Save</button>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <script src="./vendor/lucide.min.js"></script>
+    <script src="./i18n.js"></script>
+    <script src="./settings.js"></script>
+  </body>
+</html>
