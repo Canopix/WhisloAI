@@ -34,7 +34,8 @@ function specErrorFor(error) {
   if (
     lower.includes("audio payload is empty") ||
     lower.includes("no audio captured") ||
-    lower.includes("transcription response was empty")
+    lower.includes("transcription response was empty") ||
+    lower.includes("local transcription was empty")
   ) {
     return t("error.transcription_empty");
   }

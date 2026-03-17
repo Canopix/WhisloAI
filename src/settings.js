@@ -42,15 +42,23 @@ const permissionsOpenMicrophoneBtn = document.getElementById("permissions-open-m
 const permissionsOpenAccessibilityBtn = document.getElementById("permissions-open-accessibility-btn");
 const permissionsCheckMicrophoneBtn = document.getElementById("permissions-check-microphone-btn");
 const permissionsCheckAccessibilityBtn = document.getElementById("permissions-check-accessibility-btn");
+const permissionsAccessibilityRowEl = permissionsAccessibilityStatusEl
+  ? permissionsAccessibilityStatusEl.closest(".permissions-row")
+  : null;
+const anchorBehaviorContextualOptionEl = document.querySelector(
+  '.anchor-behavior-option[data-anchor-behavior-option="contextual"]',
+);
 
 const providersList = document.getElementById("providers-list");
 const providerForm = document.getElementById("provider-form");
 const providerId = document.getElementById("provider-id");
+const providerDetailsTitle = document.getElementById("provider-details-title");
 const providerName = document.getElementById("provider-name");
 const providerType = document.getElementById("provider-type");
 const providerBaseUrl = document.getElementById("provider-base-url");
 const providerTranslateModel = document.getElementById("provider-translate-model");
 const providerTranscribeModel = document.getElementById("provider-transcribe-model");
+const providerTranscribeModelHint = document.getElementById("provider-transcribe-model-hint");
 const providerTranslateModelField = document.getElementById("provider-translate-model-field");
 const providerTranscribeModelField = document.getElementById("provider-transcribe-model-field");
 const providerApiKey = document.getElementById("provider-api-key");
@@ -78,6 +86,7 @@ const localModelsDir = document.getElementById("local-models-dir");
 const pickModelsDirBtn = document.getElementById("pick-models-dir-btn");
 const saveTranscriptionBtn = document.getElementById("save-transcription-btn");
 const whisperModelsContainer = document.getElementById("whisper-models-container");
+const pipelineGuideEls = Array.from(document.querySelectorAll("[data-pipeline-guide]"));
 
 const DEFAULT_PROMPT_SETTINGS = {
   translateSystemPrompt:
@@ -236,6 +245,36 @@ function setPermissionInlineStatus(statusEl, key, tone = "neutral", rowState = "
   const row = statusEl.closest(".permissions-row");
   if (row) {
     row.dataset.state = rowState;
+  }
+}
+
+function applyRuntimePermissionUi(status) {
+  const platform = String(status?.platform || "").trim().toLowerCase();
+  const needsAccessibility = Boolean(status?.needsAccessibility);
+  if (permissionsAccessibilityRowEl) {
+    permissionsAccessibilityRowEl.hidden = !needsAccessibility;
+  }
+  if (!needsAccessibility) {
+    setPermissionInlineStatus(
+      permissionsAccessibilityStatusEl,
+      "settings.permissions.status.not_required",
+      "neutral",
+      "ready",
+    );
+  }
+
+  if (platform !== "macos") {
+    if (anchorBehaviorContextualOptionEl) {
+      anchorBehaviorContextualOptionEl.hidden = true;
+    }
+    const contextualSelectOption = anchorBehaviorEl?.querySelector('option[value="contextual"]');
+    if (contextualSelectOption) {
+      contextualSelectOption.hidden = true;
+    }
+    if (currentAnchorBehavior !== "floating") {
+      currentAnchorBehavior = "floating";
+    }
+    syncAnchorBehaviorSelectionUi();
   }
 }
 
@@ -403,35 +442,384 @@ function renderQuickModeOptions() {
   quickDefaultMode.value = selected;
 }
 
+function ensureSelectControlValue(control, desiredValue, fallbackValue) {
+  const nextValue = String(desiredValue || "").trim() || String(fallbackValue || "").trim();
+  if (!control) {
+    return;
+  }
+  if (control.tagName !== "SELECT") {
+    control.value = nextValue;
+    return;
+  }
+  const exists = Array.from(control.options).some((option) => option.value === nextValue);
+  if (!exists && nextValue) {
+    const option = document.createElement("option");
+    option.value = nextValue;
+    option.textContent = nextValue;
+    control.appendChild(option);
+  }
+  control.value = nextValue;
+}
+
 function applySettingsTranslations() {
   applyTranslations(document);
   renderQuickModeOptions();
+  bindPipelineScenarioInteractions();
   if (providersLoaded) {
     renderProvidersList(selectedProviderId);
   }
   syncProviderTypeInputs();
+  renderPipelineGuides();
 }
 
 function isOpenAiCompatibleType(value) {
   return String(value || "").trim().toLowerCase() === "openai-compatible";
 }
 
+function isOpenAiType(value) {
+  return String(value || "").trim().toLowerCase() === "openai";
+}
+
+function setProviderDetailsTitle(isCreatingNew) {
+  if (!providerDetailsTitle) {
+    return;
+  }
+  const nextKey = isCreatingNew
+    ? "settings.provider.details.title_new"
+    : "settings.provider.details.title";
+  providerDetailsTitle.dataset.i18n = nextKey;
+  providerDetailsTitle.textContent = t(nextKey);
+}
+
+function normalizedTranscriptionMode() {
+  return String(transcriptionMode?.value || "api").trim().toLowerCase() === "local" ? "local" : "api";
+}
+
+function selectedPersistedProvider() {
+  const currentId = String(providerId?.value || selectedProviderId || "").trim();
+  if (currentId) {
+    const byId = cachedProviders.find((provider) => provider.id === currentId);
+    if (byId) {
+      return byId;
+    }
+  }
+  return cachedProviders.find((provider) => provider.isActive) || cachedProviders[0] || null;
+}
+
+function activeProviderView(persistedProvider = selectedPersistedProvider()) {
+  const hasTypedApiKey = String(providerApiKey?.value || "").trim().length > 0;
+  return {
+    id: persistedProvider?.id || null,
+    providerType: String(providerType?.value || persistedProvider?.providerType || "").trim(),
+    baseUrl: String(providerBaseUrl?.value || persistedProvider?.baseUrl || "").trim(),
+    translateModel: String(
+      providerTranslateModel?.value || persistedProvider?.translateModel || "",
+    ).trim(),
+    transcribeModel: String(
+      providerTranscribeModel?.value || persistedProvider?.transcribeModel || "",
+    ).trim(),
+    hasApiKey: hasTypedApiKey || persistedProvider?.hasApiKey === true,
+  };
+}
+
+function isLikelyLocalProviderBaseUrl(baseUrl) {
+  const value = String(baseUrl || "").trim();
+  if (!value) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    const host = String(url.hostname || "").toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+  } catch (_) {
+    const lower = value.toLowerCase();
+    return (
+      lower.includes("localhost") ||
+      lower.includes("127.0.0.1") ||
+      lower.includes("0.0.0.0") ||
+      lower.includes("::1")
+    );
+  }
+}
+
+function resolvePipelineBlockers(state) {
+  const blockers = [];
+  if (!state.hasPersistedProvider) {
+    blockers.push({
+      id: "provider_missing",
+      messageKey: "settings.pipeline.blocker.provider_missing",
+      actionKey: "settings.pipeline.action.open_providers",
+      tab: "providers",
+      focusId: "new-provider-btn",
+      statusKey: "settings.pipeline.next.create_provider",
+      nextActionKey: "settings.pipeline.next.create_provider",
+    });
+    return blockers;
+  }
+
+  if (!state.translateModel) {
+    blockers.push({
+      id: "text_model_missing",
+      messageKey: "settings.pipeline.blocker.text_model_missing",
+      actionKey: "settings.pipeline.action.configure_text_model",
+      tab: "providers",
+      focusId: "provider-translate-model",
+      statusKey: "settings.pipeline.next.configure_text_model",
+      nextActionKey: "settings.pipeline.next.configure_text_model",
+    });
+  }
+
+  if (state.requiresApiKey && !state.hasApiKey) {
+    blockers.push({
+      id: "api_key_missing",
+      messageKey: "settings.pipeline.blocker.api_key_missing",
+      actionKey: "settings.pipeline.action.configure_api_key",
+      tab: "providers",
+      focusId: "provider-api-key",
+      statusKey: "settings.pipeline.next.configure_api_key",
+      nextActionKey: "settings.pipeline.next.configure_api_key",
+    });
+  }
+
+  if (state.requiresTranscribeModel && !state.transcribeModel) {
+    blockers.push({
+      id: "transcribe_model_missing",
+      messageKey: "settings.pipeline.blocker.transcribe_model_missing",
+      actionKey: "settings.pipeline.action.configure_transcribe_model",
+      tab: "providers",
+      focusId: "provider-transcribe-model",
+      statusKey: "settings.pipeline.next.configure_transcribe_model",
+      nextActionKey: "settings.pipeline.next.configure_transcribe_model",
+    });
+  }
+
+  if (state.transcriptionMode === "local" && !state.localModelConfigured) {
+    blockers.push({
+      id: "local_model_missing",
+      messageKey: "settings.pipeline.blocker.local_model_missing",
+      actionKey: "settings.pipeline.action.configure_local_model",
+      tab: "providers",
+      focusId: "pick-models-dir-btn",
+      statusKey: "settings.pipeline.next.configure_local_model",
+      nextActionKey: "settings.pipeline.next.configure_local_model",
+    });
+  }
+
+  return blockers;
+}
+
+function runtimePipelineState() {
+  const transcriptionValue = normalizedTranscriptionMode();
+  const persistedProvider = selectedPersistedProvider();
+  const activeProvider = activeProviderView(persistedProvider);
+  const providerType = String(activeProvider?.providerType || "").trim().toLowerCase();
+  const translateModel = String(activeProvider?.translateModel || "").trim();
+  const transcribeModel = String(activeProvider?.transcribeModel || "").trim();
+  const localModelConfigured = String(localModelPathValue || "").trim().length > 0;
+  const providerLooksLocal = isLikelyLocalProviderBaseUrl(activeProvider?.baseUrl);
+  const requiresApiKey = isOpenAiType(providerType);
+  const requiresTranscribeModel = transcriptionValue === "api" && isOpenAiType(providerType);
+  const hasApiKey = activeProvider?.hasApiKey === true;
+
+  let scenario = transcriptionValue === "api" ? "api_full" : "mixed";
+  if (
+    transcriptionValue === "local" &&
+    isOpenAiCompatibleType(providerType) &&
+    providerLooksLocal
+  ) {
+    scenario = "all_local";
+  }
+
+  const state = {
+    hasPersistedProvider: !!persistedProvider,
+    transcriptionMode: transcriptionValue,
+    activeProvider,
+    scenario,
+    requiresApiKey,
+    requiresTranscribeModel,
+    hasApiKey,
+    translateModel,
+    transcribeModel,
+    localModelConfigured,
+  };
+  const blockers = resolvePipelineBlockers(state);
+  return {
+    ...state,
+    blockers,
+    nextActionKey: blockers[0]?.nextActionKey || `settings.pipeline.next.${scenario}`,
+  };
+}
+
+function applyScenarioPreset(scenarioId) {
+  const scenario = String(scenarioId || "").trim();
+  if (!scenario) {
+    return;
+  }
+
+  if (scenario === "api_full") {
+    transcriptionMode.value = "api";
+  } else {
+    transcriptionMode.value = "local";
+  }
+
+  if (scenario === "all_local") {
+    providerType.value = "openai-compatible";
+    if (!isLikelyLocalProviderBaseUrl(providerBaseUrl.value)) {
+      providerBaseUrl.value = "http://127.0.0.1:1234/v1";
+    }
+  }
+
+  if (scenario === "mixed") {
+    if (isLikelyLocalProviderBaseUrl(providerBaseUrl.value) && isOpenAiCompatibleType(providerType.value)) {
+      providerType.value = "openai";
+      providerBaseUrl.value = "https://api.openai.com/v1";
+    }
+  }
+
+  syncTranscriptionLocalVisibility();
+  renderPipelineGuides();
+  setStatus(t(`settings.pipeline.next.${scenario}`), "neutral");
+}
+
+function focusPipelineTarget(blocker) {
+  const nextView = String(blocker?.tab || "providers");
+  activateView(nextView);
+  const focusId = String(blocker?.focusId || "").trim();
+  window.setTimeout(() => {
+    if (!focusId) {
+      return;
+    }
+    const target = document.getElementById(focusId);
+    if (!target) {
+      return;
+    }
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    if (typeof target.focus === "function") {
+      target.focus();
+    }
+  }, 20);
+  if (blocker?.statusKey) {
+    setStatus(t(blocker.statusKey), "neutral");
+  }
+}
+
+function renderPipelineGuideBlock(guide, state) {
+  if (!guide) {
+    return;
+  }
+
+  const preflight = guide.querySelector("[data-pipeline-preflight]");
+  const preflightTitle = guide.querySelector("[data-pipeline-preflight-title]");
+  const nextAction = guide.querySelector("[data-pipeline-next-action]");
+  const blockersEl = guide.querySelector("[data-pipeline-blockers]");
+
+  const hasBlockers = state.blockers.length > 0;
+  if (preflight) {
+    preflight.dataset.state = hasBlockers ? "needs_attention" : "ready";
+  }
+  if (preflightTitle) {
+    preflightTitle.textContent = hasBlockers
+      ? t("settings.pipeline.status.missing", { count: state.blockers.length })
+      : t("settings.pipeline.status.ready");
+  }
+  if (nextAction) {
+    nextAction.textContent = t(state.nextActionKey);
+  }
+
+  guide.querySelectorAll(".pipeline-scenario").forEach((card) => {
+    const isCurrent = card.dataset.scenario === state.scenario;
+    card.classList.toggle("is-active", isCurrent);
+    card.setAttribute("aria-current", isCurrent ? "true" : "false");
+    card.setAttribute("aria-pressed", isCurrent ? "true" : "false");
+  });
+
+  if (!blockersEl) {
+    return;
+  }
+
+  blockersEl.innerHTML = "";
+  blockersEl.hidden = !hasBlockers;
+  if (!hasBlockers) {
+    return;
+  }
+
+  for (const blocker of state.blockers) {
+    const item = document.createElement("li");
+    item.className = "pipeline-blocker-item";
+
+    const message = document.createElement("span");
+    message.className = "pipeline-blocker-message";
+    message.textContent = t(blocker.messageKey);
+
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "pipeline-blocker-btn";
+    action.textContent = t(blocker.actionKey);
+    action.addEventListener("click", () => {
+      focusPipelineTarget(blocker);
+    });
+
+    item.appendChild(message);
+    item.appendChild(action);
+    blockersEl.appendChild(item);
+  }
+}
+
+function renderPipelineGuides() {
+  if (!pipelineGuideEls.length) {
+    return;
+  }
+  const state = runtimePipelineState();
+  for (const guide of pipelineGuideEls) {
+    renderPipelineGuideBlock(guide, state);
+  }
+}
+
+function bindPipelineScenarioInteractions() {
+  for (const guide of pipelineGuideEls) {
+    const cards = guide.querySelectorAll(".pipeline-scenario");
+    cards.forEach((card) => {
+      if (card.dataset.boundScenarioClick === "true") {
+        return;
+      }
+      card.dataset.boundScenarioClick = "true";
+      card.addEventListener("click", () => {
+        applyScenarioPreset(card.dataset.scenario);
+      });
+    });
+  }
+}
+
 function syncProviderTypeInputs() {
   const openAiProvider = !isOpenAiCompatibleType(providerType.value);
+  const transcriptionUsesApi = normalizedTranscriptionMode() === "api";
+  const requiresTranscribeModel = openAiProvider && transcriptionUsesApi;
   if (providerTranslateModelField) {
     providerTranslateModelField.hidden = false;
   }
   if (providerTranscribeModelField) {
     providerTranscribeModelField.hidden = false;
+    providerTranscribeModelField.classList.toggle("is-disabled", !transcriptionUsesApi);
   }
   providerTranslateModel.required = openAiProvider;
-  providerTranscribeModel.required = openAiProvider;
+  providerTranscribeModel.required = requiresTranscribeModel;
+  providerTranscribeModel.disabled = !transcriptionUsesApi;
+  if (providerTranscribeModelHint) {
+    const transcribeHintKey = transcriptionUsesApi
+      ? "settings.field.transcribe_model_hint"
+      : "settings.field.transcribe_model_local_disabled";
+    providerTranscribeModelHint.dataset.i18n = transcribeHintKey;
+    providerTranscribeModelHint.textContent = t(transcribeHintKey);
+  }
   if (providerApiKeyField) {
     providerApiKeyField.hidden = false;
   }
   providerApiKey.disabled = false;
   providerApiKey.required = openAiProvider;
-  providerApiKey.placeholder = "sk-...";
+  providerApiKey.placeholder = openAiProvider ? "sk-..." : t("settings.field.api_key_optional_placeholder");
+  renderPipelineGuides();
 }
 
 function buildProviderPayload() {
@@ -453,6 +841,7 @@ function syncProviderButtons() {
 
 function fillProviderForm(provider) {
   selectedProviderId = provider.id;
+  setProviderDetailsTitle(false);
   providerId.value = provider.id;
   providerName.value = provider.name;
   providerType.value = provider.providerType;
@@ -469,6 +858,7 @@ function fillProviderForm(provider) {
 
 function resetProviderForm() {
   selectedProviderId = null;
+  setProviderDetailsTitle(true);
   providerId.value = "";
   providerName.value = "";
   providerType.value = "openai";
@@ -558,6 +948,7 @@ async function loadProviders(preferredId = null) {
   cachedProviders = await invoke("list_providers");
   providersLoaded = true;
   renderProvidersList(preferredId || selectedProviderId || providerId.value || null);
+  renderPipelineGuides();
 }
 
 async function saveProvider(event) {
@@ -565,10 +956,12 @@ async function saveProvider(event) {
 
   const payload = buildProviderPayload();
   const openAiProvider = !isOpenAiCompatibleType(payload.providerType);
+  const requiresTranscribeModel = openAiProvider && normalizedTranscriptionMode() === "api";
   if (
     !payload.name ||
     !payload.baseUrl ||
-    (openAiProvider && (!payload.translateModel || !payload.transcribeModel))
+    (openAiProvider && !payload.translateModel) ||
+    (requiresTranscribeModel && !payload.transcribeModel)
   ) {
     setStatusKey("settings.status.complete_provider_fields", "error");
     return;
@@ -679,8 +1072,16 @@ function fillPromptForm(settings) {
 
   promptTranslateSystem.value =
     value.translateSystemPrompt || DEFAULT_PROMPT_SETTINGS.translateSystemPrompt;
-  sourceLanguage.value = value.sourceLanguage || DEFAULT_PROMPT_SETTINGS.sourceLanguage;
-  targetLanguage.value = value.targetLanguage || DEFAULT_PROMPT_SETTINGS.targetLanguage;
+  ensureSelectControlValue(
+    sourceLanguage,
+    value.sourceLanguage,
+    DEFAULT_PROMPT_SETTINGS.sourceLanguage,
+  );
+  ensureSelectControlValue(
+    targetLanguage,
+    value.targetLanguage,
+    DEFAULT_PROMPT_SETTINGS.targetLanguage,
+  );
 
   modeSimple.value = modeInstructions.simple || DEFAULT_PROMPT_SETTINGS.modeInstructions.simple;
   modeProfessional.value =
@@ -817,6 +1218,23 @@ testProviderBtn.addEventListener("click", testProvider);
 activateProviderBtn.addEventListener("click", activateProvider);
 deleteProviderBtn.addEventListener("click", deleteProvider);
 providerType.addEventListener("change", () => syncProviderTypeInputs());
+for (const control of [
+  providerName,
+  providerBaseUrl,
+  providerTranslateModel,
+  providerTranscribeModel,
+  providerApiKey,
+]) {
+  if (!control) {
+    continue;
+  }
+  control.addEventListener("input", () => {
+    renderPipelineGuides();
+  });
+  control.addEventListener("change", () => {
+    renderPipelineGuides();
+  });
+}
 newProviderBtn.addEventListener("click", () => {
   resetProviderForm();
   activateView("providers");
@@ -915,6 +1333,7 @@ if (permissionsCheckAccessibilityBtn) {
 
 function syncTranscriptionLocalVisibility() {
   transcriptionLocalSection.hidden = transcriptionMode.value !== "local";
+  syncProviderTypeInputs();
 }
 
 function normalizeDirectoryPath(value) {
@@ -1119,8 +1538,10 @@ async function renderWhisperModels() {
       row.appendChild(btn);
       whisperModelsContainer.appendChild(row);
     }
+    renderPipelineGuides();
   } catch (_) {
     whisperModelsContainer.innerHTML = `<p class="hint">${escapeHtml(t("settings.transcription.load_models_failed"))}</p>`;
+    renderPipelineGuides();
   }
 }
 
@@ -1228,15 +1649,24 @@ async function bootstrap() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
   }
+  bindPipelineScenarioInteractions();
 
   await loadUiSettings();
 
   if (!invoke) {
+    renderPipelineGuides();
     setStatusKey("settings.status.app_not_ready", "error");
     return;
   }
 
   try {
+    try {
+      const onboardingStatus = await invoke("get_onboarding_status");
+      applyRuntimePermissionUi(onboardingStatus);
+    } catch (_) {
+      // Keep default UI if runtime status is unavailable.
+    }
+
     if (listen) {
       await listen("ui-language-changed", async (event) => {
         const nextPreference = String(event?.payload?.uiLanguagePreference || "system");
@@ -1258,6 +1688,7 @@ async function bootstrap() {
 
     await Promise.all([loadProviders(), loadPromptSettings(), loadTranscriptionConfig()]);
     await renderWhisperModels();
+    renderPipelineGuides();
     setStatusKey("settings.status.ready", "neutral");
   } catch (error) {
     setStatus(t("settings.status.failed_load", { error: normalizeError(error) }), "error");

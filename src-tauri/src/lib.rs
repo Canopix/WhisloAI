@@ -347,7 +347,11 @@ fn default_ui_language_preference() -> String {
 }
 
 fn default_anchor_behavior() -> String {
-    "contextual".to_string()
+    if cfg!(target_os = "macos") {
+        "contextual".to_string()
+    } else {
+        "floating".to_string()
+    }
 }
 
 fn default_mode_instruction_for(mode: &str) -> Option<&'static str> {
@@ -1635,7 +1639,7 @@ fn simulate_copy_shortcut() -> Result<(), String> {
     Err("Automatic copy is not supported on this platform in the MVP.".to_string())
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 fn probe_input_automation_permission() -> Result<(), String> {
     use enigo::Direction::{Press, Release};
     use enigo::{Enigo, Key, Keyboard, Settings};
@@ -1643,9 +1647,68 @@ fn probe_input_automation_permission() -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default())
         .map_err(|e| format!("Could not initialize keyboard automation: {e}"))?;
 
-    #[cfg(target_os = "macos")]
     let modifier_key = Key::Meta;
-    #[cfg(target_os = "windows")]
+
+    enigo
+        .key(modifier_key, Press)
+        .map_err(|e| format!("Automation permission denied: {e}"))?;
+    enigo
+        .key(modifier_key, Release)
+        .map_err(|e| format!("Automation permission denied: {e}"))?;
+
+    // Anchor placement in contextual mode depends on AX lookups through System Events.
+    // This catches the case where key simulation works but UI scripting is still denied.
+    let probe_script = r#"
+try
+  tell application "System Events"
+    set _front to first application process whose frontmost is true
+    set _name to name of _front
+  end tell
+  return "ok"
+on error errMsg
+  return "ERROR:" & errMsg
+end try
+"#;
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(probe_script)
+        .output()
+        .map_err(|e| format!("Could not run macOS accessibility probe: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let detail = if stderr.is_empty() {
+            "System Events check failed.".to_string()
+        } else {
+            stderr
+        };
+        return Err(format!(
+            "Automation permission denied: {detail}. Enable WhisloAI in Privacy & Security > Accessibility and Automation (System Events), then restart WhisloAI."
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.starts_with("ERROR:") {
+        let detail = stdout.trim_start_matches("ERROR:").trim();
+        return Err(format!(
+            "Automation permission denied: {}. Enable WhisloAI in Privacy & Security > Accessibility and Automation (System Events), then restart WhisloAI.",
+            if detail.is_empty() {
+                "System Events access is blocked."
+            } else {
+                detail
+            }
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn probe_input_automation_permission() -> Result<(), String> {
+    use enigo::Direction::{Press, Release};
+    use enigo::{Enigo, Key, Keyboard, Settings};
+
+    let mut enigo = Enigo::new(&Settings::default())
+        .map_err(|e| format!("Could not initialize keyboard automation: {e}"))?;
+
     let modifier_key = Key::Control;
 
     enigo
@@ -2348,10 +2411,6 @@ fn focused_text_anchor_snapshot(_app: &tauri::AppHandle) -> Option<FocusedAnchor
 }
 
 fn start_anchor_monitor_once(app: tauri::AppHandle) {
-    if !cfg!(target_os = "macos") {
-        return;
-    }
-
     if ANCHOR_MONITOR_STARTED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -2964,6 +3023,33 @@ fn probe_auto_insert_permission() -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn log_dictation_trace(
+    event: String,
+    payload: Option<serde_json::Value>,
+    level: Option<String>,
+) -> Result<(), String> {
+    let event = event.trim();
+    if event.is_empty() {
+        return Err("Event is empty.".to_string());
+    }
+
+    let payload_text = payload
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "{}".to_string());
+    let line = format!("dictation_trace event={} payload={}", event, payload_text);
+    match level
+        .unwrap_or_else(|| "info".to_string())
+        .trim()
+        .to_lowercase()
+        .as_str()
+    {
+        "warn" | "error" => log::warn!("{line}"),
+        _ => log::info!("{line}"),
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let value = url.trim();
     if value.is_empty() {
@@ -3556,6 +3642,14 @@ fn transcribe_with_local_whisper(
     use symphonia::core::probe::Hint;
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+    log::info!(
+        "local_whisper:start model_path='{}' model_exists={} audio_bytes={} source_language={}",
+        model_path,
+        std::path::Path::new(model_path).exists(),
+        audio_bytes.len(),
+        source_language
+    );
+
     let audio_copy = audio_bytes.to_vec();
     let cursor = std::io::Cursor::new(audio_copy);
     let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
@@ -3596,6 +3690,7 @@ fn transcribe_with_local_whisper(
     if samples.is_empty() {
         return Err("No audio samples decoded.".to_string());
     }
+    let decoded_samples_len = samples.len();
     let resampled = if sample_rate != 16000 {
         let new_len = (samples.len() as u64 * 16000 / sample_rate as u64) as usize;
         (0..new_len)
@@ -3607,6 +3702,12 @@ fn transcribe_with_local_whisper(
     } else {
         samples
     };
+    log::info!(
+        "local_whisper:decoded sample_rate={} decoded_samples={} resampled_samples={}",
+        sample_rate,
+        decoded_samples_len,
+        resampled.len()
+    );
     let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
         .map_err(|e| format!("Could not load Whisper model: {e}"))?;
     let mut state = ctx
@@ -3630,11 +3731,12 @@ fn transcribe_with_local_whisper(
         .join(" ")
         .trim()
         .to_string();
-    Ok(if text.is_empty() {
-        "".to_string()
-    } else {
-        text
-    })
+    log::info!(
+        "local_whisper:done segments={} transcript_chars={}",
+        state.as_iter().count(),
+        text.chars().count()
+    );
+    normalize_local_transcription_output(text)
 }
 
 fn local_transcription_block_reason(is_macos: bool, is_rosetta_translated: bool) -> Option<&'static str> {
@@ -3644,6 +3746,23 @@ fn local_transcription_block_reason(is_macos: bool, is_rosetta_translated: bool)
         );
     }
     None
+}
+
+fn transcribe_error(message: impl Into<String>) -> Result<String, String> {
+    let message = message.into();
+    log::warn!("transcribe_audio failed: {message}");
+    Err(message)
+}
+
+fn normalize_local_transcription_output(text: String) -> Result<String, String> {
+    let value = text.trim().to_string();
+    if value.is_empty() {
+        return Err(
+            "Local transcription was empty. Try recording again, speak closer to the microphone, or select a larger Whisper model."
+                .to_string(),
+        );
+    }
+    Ok(value)
 }
 
 #[cfg(target_os = "macos")]
@@ -3675,24 +3794,31 @@ async fn transcribe_audio(
 ) -> Result<String, String> {
     let base64_payload = audio_base64.trim();
     if base64_payload.is_empty() {
-        return Err("Audio payload is empty.".to_string());
+        return transcribe_error("Audio payload is empty.");
     }
 
     let audio_bytes = base64::engine::general_purpose::STANDARD
         .decode(base64_payload)
-        .map_err(|e| format!("Could not decode audio payload: {e}"))?;
+        .map_err(|e| {
+            let message = format!("Could not decode audio payload: {e}");
+            log::warn!("transcribe_audio failed: {message}");
+            message
+        })?;
 
     if audio_bytes.is_empty() {
-        return Err("Audio payload is empty.".to_string());
+        return transcribe_error("Audio payload is empty.");
     }
 
-    let config = load_config(&app)?;
+    let config = load_config(&app).map_err(|error| {
+        log::warn!("transcribe_audio failed: {error}");
+        error
+    })?;
 
     if config.transcription.mode == "local" {
         if let Some(reason) =
             local_transcription_block_reason(cfg!(target_os = "macos"), is_running_under_rosetta())
         {
-            return Err(reason.to_string());
+            return transcribe_error(reason.to_string());
         }
 
         if let Some(ref path) = config.transcription.local_model_path {
@@ -3705,21 +3831,31 @@ async fn transcribe_audio(
                         &audio_bytes,
                         mime_type.as_deref(),
                         source,
-                    );
+                    )
+                    .map_err(|error| {
+                        log::warn!("transcribe_audio failed: {error}");
+                        error
+                    });
                 }
                 #[cfg(not(feature = "local-transcription"))]
                 {
-                    return Err("Local transcription requires building with the 'local-transcription' feature (cmake needed). Use API mode or rebuild with: cargo build --features local-transcription".to_string());
+                    return transcribe_error("Local transcription requires building with the 'local-transcription' feature (cmake needed). Use API mode or rebuild with: cargo build --features local-transcription".to_string());
                 }
             }
         }
-        return Err(
+        return transcribe_error(
             "Local model path not set or file not found. Configure in Settings.".to_string(),
         );
     }
 
-    let provider = active_provider(&config)?;
-    let api_key = provider_api_key(&provider)?;
+    let provider = active_provider(&config).map_err(|error| {
+        log::warn!("transcribe_audio failed: {error}");
+        error
+    })?;
+    let api_key = provider_api_key(&provider).map_err(|error| {
+        log::warn!("transcribe_audio failed: {error}");
+        error
+    })?;
     let endpoint = provider_endpoint(&provider.base_url, "audio/transcriptions");
 
     let mime = mime_type
@@ -3734,7 +3870,11 @@ async fn transcribe_audio(
     let file_part = reqwest::multipart::Part::bytes(audio_bytes)
         .file_name(audio_file_name(mime))
         .mime_str(mime_for_part)
-        .map_err(|e| format!("Invalid audio mime type: {e}"))?;
+        .map_err(|e| {
+            let message = format!("Invalid audio mime type: {e}");
+            log::warn!("transcribe_audio failed: {message}");
+            message
+        })?;
 
     let mut form = reqwest::multipart::Form::new().part("file", file_part);
     if let Some(model_name) = non_empty_trimmed(&provider.transcribe_model) {
@@ -3752,7 +3892,11 @@ async fn transcribe_audio(
         .multipart(form)
         .send()
         .await
-        .map_err(|e| format!("Transcription request failed: {e}"))?;
+        .map_err(|e| {
+            let message = format!("Transcription request failed: {e}");
+            log::warn!("transcribe_audio failed: {message}");
+            message
+        })?;
 
     let status = response.status();
     let body = response
@@ -3761,15 +3905,18 @@ async fn transcribe_audio(
         .unwrap_or_else(|_| "<empty body>".to_string());
 
     if !status.is_success() {
-        return Err(format!(
+        return transcribe_error(format!(
             "Transcription failed with HTTP {}: {}",
             status.as_u16(),
             body
         ));
     }
 
-    parse_transcription_text(&body)
-        .ok_or_else(|| "Transcription response was empty. Try recording again.".to_string())
+    parse_transcription_text(&body).ok_or_else(|| {
+        let message = "Transcription response was empty. Try recording again.".to_string();
+        log::warn!("transcribe_audio failed: {message}");
+        message
+    })
 }
 
 #[tauri::command]
@@ -4011,10 +4158,6 @@ pub fn run() {
                     .build(),
             )?;
 
-            if let Ok(log_dir) = app.path().app_log_dir() {
-                log::info!("WhisloAI logs directory: {}", log_dir.display());
-            }
-
             if let Err(error) = setup_tray_icon(app.handle()) {
                 log::warn!("Tray icon is unavailable: {error}");
             }
@@ -4050,6 +4193,7 @@ pub fn run() {
             complete_onboarding,
             open_permission_settings,
             probe_auto_insert_permission,
+            log_dictation_trace,
             open_external_url,
             open_settings_window,
             open_widget_window,
@@ -4083,8 +4227,9 @@ mod tests {
     use super::{
         download_progress_percent, local_prefers_openai_chat_endpoint, logical_to_physical,
         local_transcription_block_reason, non_empty_trimmed, normalize_anchor_behavior,
-        normalize_provider_base_url, point_in_rect, provider_endpoint, sanitize_scale_factor,
-        scale_for_logical_point_in_rects,
+        normalize_local_transcription_output, normalize_provider_base_url, point_in_rect,
+        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
+        transcribe_error,
     };
 
     #[test]
@@ -4216,5 +4361,18 @@ mod tests {
         assert!(local_transcription_block_reason(true, true).is_some());
         assert!(local_transcription_block_reason(true, false).is_none());
         assert!(local_transcription_block_reason(false, true).is_none());
+    }
+
+    #[test]
+    fn transcribe_error_passthrough_returns_original_message() {
+        let result = transcribe_error("boom");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "boom".to_string());
+    }
+
+    #[test]
+    fn normalize_local_transcription_output_rejects_empty_text() {
+        let result = normalize_local_transcription_output("   ".to_string());
+        assert!(result.is_err());
     }
 }

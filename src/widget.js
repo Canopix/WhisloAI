@@ -65,6 +65,11 @@ function logDictationTrace(event, payload) {
       ...payload,
     };
     console.info("[dictation_trace]", JSON.stringify(data));
+    invoke("log_dictation_trace", {
+      event,
+      payload: data,
+      level: event.includes("error") ? "warn" : "info",
+    }).catch(() => {});
   } catch (_) {
     // no-op
   }
@@ -452,13 +457,16 @@ async function startDictation() {
 
       setBusy(true);
       setPreparingSpinner(true);
+      let phase = "mode_load";
 
       try {
         const modePromise = loadQuickMode();
+        phase = "encode_audio";
         const encodeStartedAt = nowMs();
         const audioBase64 = await blobToBase64(blob);
         const encodeMs = nowMs() - encodeStartedAt;
 
+        phase = "transcribe_audio";
         const transcribeStartedAt = nowMs();
         const transcript = await invoke("transcribe_audio", {
           audioBase64,
@@ -466,6 +474,7 @@ async function startDictation() {
         });
         const transcribeMs = nowMs() - transcribeStartedAt;
 
+        phase = "translate_text";
         await modePromise;
         const translateStartedAt = nowMs();
         const output = await invoke("translate_text", {
@@ -474,6 +483,7 @@ async function startDictation() {
         });
         const translateMs = nowMs() - translateStartedAt;
 
+        phase = "insert_text";
         const insertStartedAt = nowMs();
         await insertResultText(output);
         const insertMs = nowMs() - insertStartedAt;
@@ -493,6 +503,8 @@ async function startDictation() {
           aborted: false,
           blob_size_bytes: blob.size,
           blob_build_ms: Number(blobBuildMs.toFixed(1)),
+          message: String(error?.message || error || "unknown"),
+          phase: typeof phase === "string" ? phase : "unknown",
           total_ms: Number((nowMs() - stopStartedAt).toFixed(1)),
         });
       } finally {

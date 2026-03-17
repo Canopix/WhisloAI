@@ -20,7 +20,6 @@
           <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General & Permissions</button>
           <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
           <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
-          <button type="button" id="nav-transcription" class="settings-nav-btn" data-view="transcription" role="tab" aria-selected="false" aria-controls="view-transcription" data-i18n="settings.nav.transcription">Transcription</button>
         </aside>
 
         <section class="settings-content">
@@ -197,10 +196,43 @@
                 <ul id="providers-list" class="providers-cards"></ul>
               </aside>
 
+              <div class="settings-main">
               <form id="provider-form" class="settings-card">
-                <h2 data-i18n="settings.provider.details.title">Provider Details</h2>
-                <p class="hint" data-i18n="settings.provider.details.hint">Test first. Save only when the connection is valid.</p>
+                <h2 id="provider-details-title" data-i18n="settings.provider.details.title">Provider Details</h2>
+                <p class="hint" data-i18n="settings.provider.details.hint">Configure connection and models for the selected provider. Test and save when ready.</p>
                 <input id="provider-id" type="hidden" />
+                <section id="pipeline-guide-providers" class="pipeline-guide pipeline-guide-inline" data-pipeline-guide="providers" aria-live="polite">
+                  <div class="pipeline-inline-header">
+                    <span class="pipeline-inline-title" data-i18n="settings.pipeline.inline.title">Guided mode</span>
+                    <span class="pipeline-inline-status" data-pipeline-preflight data-state="checking">
+                      <span data-pipeline-preflight-title data-i18n="settings.pipeline.status.checking">Checking configuration...</span>
+                    </span>
+                  </div>
+                  <div class="pipeline-scenarios pipeline-scenarios-inline" role="list">
+                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="api_full">
+                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">☁️</span>
+                      <span class="pipeline-scenario-inline-copy">
+                        <strong data-i18n="settings.pipeline.scenario.api.title">Cloud</strong>
+                        <small data-i18n="settings.pipeline.scenario.api.inline">API speech + text</small>
+                      </span>
+                    </button>
+                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="mixed">
+                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">🔀</span>
+                      <span class="pipeline-scenario-inline-copy">
+                        <strong data-i18n="settings.pipeline.scenario.mixed.title">Hybrid</strong>
+                        <small data-i18n="settings.pipeline.scenario.mixed.inline">Local speech + cloud text</small>
+                      </span>
+                    </button>
+                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="all_local">
+                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">🖥️</span>
+                      <span class="pipeline-scenario-inline-copy">
+                        <strong data-i18n="settings.pipeline.scenario.local.title">Local</strong>
+                        <small data-i18n="settings.pipeline.scenario.local.inline">Local speech + local text</small>
+                      </span>
+                    </button>
+                  </div>
+                  <p class="pipeline-inline-next" data-pipeline-next-action></p>
+                </section>
 
                 <div class="settings-form-grid">
                   <div class="field">
@@ -234,6 +266,9 @@
                       placeholder="gpt-4o-mini-transcribe"
                       required
                     />
+                    <small id="provider-transcribe-model-hint" class="field-hint" data-i18n="settings.field.transcribe_model_hint">
+                      Used only when transcription mode is API.
+                    </small>
                   </div>
 
                   <div class="field" id="provider-api-key-field">
@@ -254,6 +289,47 @@
                   <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
                 </div>
               </form>
+              <section id="provider-transcription-card" class="settings-card">
+                <h2 data-i18n="settings.transcription.title">Transcription</h2>
+                <p class="hint" data-i18n="settings.transcription.hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
+                <div class="settings-form-grid">
+                  <div class="field field-full">
+                    <label for="transcription-mode" data-i18n="settings.transcription.mode">Mode</label>
+                    <select id="transcription-mode">
+                      <option value="api" data-i18n="settings.transcription.mode.api">API (provider)</option>
+                      <option value="local" data-i18n="settings.transcription.mode.local">Local (Whisper)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div id="transcription-local-section" class="transcription-local-section" hidden>
+                  <h3 class="settings-subtitle" data-i18n="settings.transcription.local_model">Local model</h3>
+                  <p class="hint">
+                    <span data-i18n="settings.transcription.local_hint">Download a model below. The downloaded model is selected automatically for transcription. Models are from ggerganov/whisper.cpp.</span>
+                    <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.
+                  </p>
+
+                  <div class="field field-full field-top-spacing">
+                    <label for="local-models-dir" data-i18n="settings.transcription.models_dir">Models folder</label>
+                    <div class="field-with-button">
+                      <input id="local-models-dir" type="text" data-i18n-placeholder="settings.transcription.no_models_dir" placeholder="No folder selected" readonly />
+                      <button type="button" id="pick-models-dir-btn" class="settings-btn-secondary" data-i18n="settings.transcription.select_folder">Select folder...</button>
+                    </div>
+                    <small class="field-hint" data-i18n="settings.transcription.models_dir_hint">Choose and save a folder before downloading models.</small>
+                  </div>
+
+                  <div class="whisper-models-list">
+                    <p class="field-label" data-i18n="settings.transcription.download">Download model</p>
+                    <div id="whisper-models-container" class="whisper-models-container"></div>
+                    <small class="field-hint" data-i18n="settings.transcription.auto_select_hint">Downloaded models are selected automatically for transcription.</small>
+                  </div>
+                </div>
+
+                <div class="settings-actions settings-actions-spacious">
+                  <button type="button" id="save-transcription-btn" class="settings-btn-primary" data-i18n="settings.action.save">Save</button>
+                </div>
+              </section>
+              </div>
             </div>
           </section>
 
@@ -267,29 +343,31 @@
               <div class="settings-form-grid">
                 <div class="field">
                   <label for="source-language" data-i18n="settings.field.source_language">Source language</label>
-                  <input
-                    id="source-language"
-                    type="text"
-                    data-i18n-placeholder="settings.placeholder.source_language"
-                    placeholder="Spanish"
-                    list="common-languages"
-                  />
+                  <select id="source-language">
+                    <option value="Spanish">Spanish</option>
+                    <option value="English">English</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Chinese">Chinese</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label for="target-language" data-i18n="settings.field.target_language">Target language</label>
-                  <input
-                    id="target-language"
-                    type="text"
-                    data-i18n-placeholder="settings.placeholder.target_language"
-                    placeholder="English"
-                    list="common-languages"
-                  />
+                  <select id="target-language">
+                    <option value="English">English</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Chinese">Chinese</option>
+                  </select>
                 </div>
               </div>
-              <datalist id="common-languages">
-                <option value="Spanish"><option value="English"><option value="Portuguese"><option value="French">
-                <option value="German"><option value="Italian"><option value="Japanese"><option value="Chinese">
-              </datalist>
 
               <h3 class="settings-subtitle" data-i18n="settings.prompts.system">System prompts</h3>
               <div class="settings-form-grid">
@@ -363,49 +441,6 @@
             </form>
           </section>
 
-          <section id="view-transcription" class="settings-view" data-view="transcription" role="tabpanel" aria-labelledby="nav-transcription">
-            <div class="settings-card">
-              <h2 data-i18n="settings.transcription.title">Transcription</h2>
-              <p class="hint" data-i18n="settings.transcription.hint">Choose how to transcribe speech: use the provider API (OpenAI, etc.) or run Whisper locally for privacy and offline use.</p>
-
-              <div class="settings-form-grid">
-                <div class="field field-full">
-                  <label for="transcription-mode" data-i18n="settings.transcription.mode">Mode</label>
-                  <select id="transcription-mode">
-                    <option value="api" data-i18n="settings.transcription.mode.api">API (provider)</option>
-                    <option value="local" data-i18n="settings.transcription.mode.local">Local (Whisper)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div id="transcription-local-section" class="transcription-local-section" hidden>
-                <h3 class="settings-subtitle" data-i18n="settings.transcription.local_model">Local model</h3>
-                <p class="hint">
-                  <span data-i18n="settings.transcription.local_hint">Download a model below. The downloaded model is selected automatically for transcription. Models are from ggerganov/whisper.cpp.</span>
-                  <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">ggerganov/whisper.cpp</a>.
-                </p>
-
-                <div class="field field-full field-top-spacing">
-                  <label for="local-models-dir" data-i18n="settings.transcription.models_dir">Models folder</label>
-                  <div class="field-with-button">
-                    <input id="local-models-dir" type="text" data-i18n-placeholder="settings.transcription.no_models_dir" placeholder="No folder selected" readonly />
-                    <button type="button" id="pick-models-dir-btn" class="settings-btn-secondary" data-i18n="settings.transcription.select_folder">Select folder...</button>
-                  </div>
-                  <small class="field-hint" data-i18n="settings.transcription.models_dir_hint">Choose and save a folder before downloading models.</small>
-                </div>
-
-                <div class="whisper-models-list">
-                  <p class="field-label" data-i18n="settings.transcription.download">Download model</p>
-                  <div id="whisper-models-container" class="whisper-models-container"></div>
-                  <small class="field-hint" data-i18n="settings.transcription.auto_select_hint">Downloaded models are selected automatically for transcription.</small>
-                </div>
-              </div>
-
-              <div class="settings-actions settings-actions-spacious">
-                <button type="button" id="save-transcription-btn" class="settings-btn-primary" data-i18n="settings.action.save">Save</button>
-              </div>
-            </div>
-          </section>
         </section>
       </div>
     </main>

@@ -75,6 +75,62 @@ npm run build
 npm run tauri build
 ```
 
+## Local macOS Install and Signing (Contributors)
+
+For day-to-day local installs on macOS, use:
+
+```bash
+bash scripts/build-install-local-macos.sh
+```
+
+This script:
+
+1. Builds the frontend and Tauri app bundle
+2. Installs the app to `/Applications/WhisloAI.app`
+3. Re-signs the installed app
+4. Opens the installed app
+
+If you see:
+
+`A public key has been found, but no private key. Make sure to set TAURI_SIGNING_PRIVATE_KEY`
+
+that error is about updater artifact signing, not local app execution. The script can still continue with local install.
+
+To avoid macOS Accessibility/Automation permission desync across local rebuilds, do not rely on ad-hoc signing.
+
+1. Install a valid `Developer ID Application` certificate plus private key in your login keychain
+2. Confirm identity is available:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+3. Export your identity so local scripts use stable signing:
+
+```bash
+export WHISLOAI_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+```
+
+4. Verify installed app signature is not ad-hoc:
+
+```bash
+codesign -dvv /Applications/WhisloAI.app 2>&1 | rg "Signature=|Authority=|TeamIdentifier="
+```
+
+Expected: `Authority=Developer ID Application...` and `TeamIdentifier=<your team id>`.
+
+If permissions still look enabled in System Settings but checks fail inside the app, reset TCC once and re-grant:
+
+```bash
+tccutil reset Accessibility com.whisloai.desktop
+tccutil reset AppleEvents com.whisloai.desktop
+```
+
+Then re-enable WhisloAI in:
+
+- `Privacy & Security > Accessibility`
+- `Privacy & Security > Automation` (`System Events`)
+
 ## Publish a Release (Maintainers)
 
 1. Update version values:
@@ -93,6 +149,7 @@ git push origin v0.1.1
    - `TAURI_SIGNING_PRIVATE_KEY` (content of your updater private key)
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional, only if your key has a password)
 5. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS, Windows, and Linux, signs updater assets, and attaches them to a GitHub Release.
+6. Note: updater signing (`TAURI_SIGNING_PRIVATE_KEY`) is different from macOS app codesigning (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_TEAM_ID`).
 
 ## Usage
 
