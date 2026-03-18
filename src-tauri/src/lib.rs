@@ -31,6 +31,8 @@ const SUPPORTED_STYLE_MODES: [&str; 5] = ["simple", "professional", "friendly", 
 const INPUT_TARGET_TTL_MS: u128 = 90_000;
 const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
 const REFOCUS_POST_RESTORE_MS: u64 = 35;
+const ANCHOR_MONITOR_ACTIVE_POLL_MS: u64 = 180;
+const ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS: u64 = 700;
 
 #[derive(Default)]
 struct PendingQuickAction(Mutex<Option<String>>);
@@ -2410,6 +2412,20 @@ fn focused_text_anchor_snapshot(_app: &tauri::AppHandle) -> Option<FocusedAnchor
     None
 }
 
+fn contextual_anchor_tracking_supported() -> bool {
+    cfg!(target_os = "macos")
+}
+
+fn anchor_monitor_poll_interval_ms(
+    floating_mode: bool,
+    contextual_tracking_supported: bool,
+) -> u64 {
+    if !floating_mode && !contextual_tracking_supported {
+        return ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS;
+    }
+    ANCHOR_MONITOR_ACTIVE_POLL_MS
+}
+
 fn start_anchor_monitor_once(app: tauri::AppHandle) {
     if ANCHOR_MONITOR_STARTED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -2420,13 +2436,16 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
 
     thread::spawn(move || {
         let mut last: Option<AnchorPosition> = None;
+        let contextual_tracking_supported = contextual_anchor_tracking_supported();
 
         loop {
             let Some(anchor) = app.get_webview_window("anchor") else {
-                thread::sleep(std::time::Duration::from_millis(180));
+                thread::sleep(std::time::Duration::from_millis(ANCHOR_MONITOR_ACTIVE_POLL_MS));
                 continue;
             };
             let floating_mode = is_anchor_floating_mode(&app);
+            let poll_interval_ms =
+                anchor_monitor_poll_interval_ms(floating_mode, contextual_tracking_supported);
 
             if SETTINGS_WINDOW_OPEN.load(Ordering::SeqCst) {
                 let _ = anchor.hide();
@@ -2436,7 +2455,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                     clear_last_anchor_timestamp(&app);
                 }
                 clear_last_input_focus_target(&app);
-                thread::sleep(std::time::Duration::from_millis(180));
+                thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
                 continue;
             }
 
@@ -2444,9 +2463,19 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 if quick.is_visible().unwrap_or(false) {
                     let _ = anchor.hide();
                     last = None;
-                    thread::sleep(std::time::Duration::from_millis(180));
+                    thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
                     continue;
                 }
+            }
+
+            if !floating_mode && !contextual_tracking_supported {
+                let _ = anchor.hide();
+                last = None;
+                clear_last_anchor_position(&app);
+                clear_last_anchor_timestamp(&app);
+                clear_last_input_focus_target(&app);
+                thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
+                continue;
             }
 
             if floating_mode {
@@ -2481,7 +2510,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                     last = None;
                 }
 
-                thread::sleep(std::time::Duration::from_millis(180));
+                thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
                 continue;
             }
 
@@ -2532,7 +2561,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 }
             }
 
-            thread::sleep(std::time::Duration::from_millis(180));
+            thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
         }
     });
 }
@@ -4225,11 +4254,11 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        download_progress_percent, local_prefers_openai_chat_endpoint, logical_to_physical,
-        local_transcription_block_reason, non_empty_trimmed, normalize_anchor_behavior,
+        anchor_monitor_poll_interval_ms, download_progress_percent,
+        local_prefers_openai_chat_endpoint, local_transcription_block_reason,
+        logical_to_physical, non_empty_trimmed, normalize_anchor_behavior,
         normalize_local_transcription_output, normalize_provider_base_url, point_in_rect,
-        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
-        transcribe_error,
+        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects, transcribe_error,
     };
 
     #[test]
@@ -4374,5 +4403,16 @@ mod tests {
     fn normalize_local_transcription_output_rejects_empty_text() {
         let result = normalize_local_transcription_output("   ".to_string());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn anchor_monitor_poll_interval_stays_fast_for_active_tracking() {
+        assert_eq!(anchor_monitor_poll_interval_ms(true, false), 180);
+        assert_eq!(anchor_monitor_poll_interval_ms(false, true), 180);
+    }
+
+    #[test]
+    fn anchor_monitor_poll_interval_slows_down_when_contextual_tracking_is_unavailable() {
+        assert_eq!(anchor_monitor_poll_interval_ms(false, false), 700);
     }
 }
