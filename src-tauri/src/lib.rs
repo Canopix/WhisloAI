@@ -1753,10 +1753,18 @@ fn language_to_iso639(language: &str) -> Option<&'static str> {
 }
 
 fn audio_file_name(mime_type: Option<&str>) -> String {
-    let extension = match mime_type.unwrap_or_default() {
-        "audio/webm" | "audio/webm;codecs=opus" => "webm",
-        "audio/ogg" | "audio/ogg;codecs=opus" => "ogg",
-        "audio/mp4" | "audio/m4a" => "m4a",
+    let normalized = mime_type
+        .unwrap_or_default()
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    let extension = match normalized.as_str() {
+        "audio/webm" => "webm",
+        "audio/ogg" => "ogg",
+        "audio/mp4" | "audio/m4a" | "audio/x-m4a" => "m4a",
         "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
         _ => "bin",
     };
@@ -1941,6 +1949,128 @@ struct FocusedAnchorSnapshot {
     input_focus_point: Option<(i32, i32)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AnchorSnapshotRawParse {
+    Found {
+        bundle_id: Option<String>,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    },
+    Skip {
+        reason: String,
+        bundle_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct FocusedAnchorProbe {
+    snapshot: Option<FocusedAnchorSnapshot>,
+    reason: String,
+    bundle_id: Option<String>,
+}
+
+fn non_empty_optional(value: &str) -> Option<String> {
+    let clean = value.trim();
+    if clean.is_empty() {
+        None
+    } else {
+        Some(clean.to_string())
+    }
+}
+
+fn parse_anchor_snapshot_probe_output(raw: &str) -> Option<AnchorSnapshotRawParse> {
+    let clean = raw.trim();
+    if clean.is_empty() {
+        return None;
+    }
+
+    if clean == "NONE" {
+        return Some(AnchorSnapshotRawParse::Skip {
+            reason: "none".to_string(),
+            bundle_id: None,
+        });
+    }
+
+    let mut parts = clean.split('\t');
+    match parts.next()?.trim() {
+        "OK" => {
+            let bundle_id = non_empty_optional(parts.next().unwrap_or_default());
+            let geometry_raw = parts.next()?.trim();
+            let mut geometry = geometry_raw.split(',').map(str::trim);
+            let x = geometry.next()?.parse::<i32>().ok()?;
+            let y = geometry.next()?.parse::<i32>().ok()?;
+            let w = geometry.next()?.parse::<i32>().ok()?;
+            let h = geometry.next()?.parse::<i32>().ok()?;
+            Some(AnchorSnapshotRawParse::Found {
+                bundle_id,
+                x,
+                y,
+                w,
+                h,
+            })
+        }
+        "SKIP" => {
+            let reason = parts.next().unwrap_or("unknown_skip").trim();
+            let bundle_id = non_empty_optional(parts.next().unwrap_or_default());
+            Some(AnchorSnapshotRawParse::Skip {
+                reason: if reason.is_empty() {
+                    "unknown_skip".to_string()
+                } else {
+                    reason.to_string()
+                },
+                bundle_id,
+            })
+        }
+        "ERROR" => {
+            let reason = parts.next().unwrap_or("script_error").trim();
+            Some(AnchorSnapshotRawParse::Skip {
+                reason: if reason.is_empty() {
+                    "script_error".to_string()
+                } else {
+                    format!("script_error:{reason}")
+                },
+                bundle_id: None,
+            })
+        }
+        _ => {
+            // Backward-compatible parsing for older output format: "<bundle>\t<x,y,w,h>".
+            if let Some((bundle_raw, geometry_raw)) = clean.split_once('\t') {
+                let mut geometry = geometry_raw.split(',').map(str::trim);
+                let x = geometry.next()?.parse::<i32>().ok()?;
+                let y = geometry.next()?.parse::<i32>().ok()?;
+                let w = geometry.next()?.parse::<i32>().ok()?;
+                let h = geometry.next()?.parse::<i32>().ok()?;
+                return Some(AnchorSnapshotRawParse::Found {
+                    bundle_id: non_empty_optional(bundle_raw),
+                    x,
+                    y,
+                    w,
+                    h,
+                });
+            }
+            None
+        }
+    }
+}
+
+fn log_contextual_anchor_decision(
+    decision: &str,
+    reason: &str,
+    bundle_id: Option<&str>,
+    position: Option<AnchorPosition>,
+) {
+    let payload = serde_json::json!({
+        "event": "anchor_contextual_decision",
+        "decision": decision,
+        "reason": reason,
+        "bundle_id": bundle_id,
+        "position": position.map(|point| serde_json::json!({ "x": point.x, "y": point.y })),
+    });
+    log::info!("{payload}");
+}
+
 fn show_main_window_for_onboarding(app: &tauri::AppHandle) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.show();
@@ -1958,6 +2088,7 @@ fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(anchor) = app.get_webview_window("anchor") {
         let _ = anchor.set_size(Size::Logical(LogicalSize::new(40.0, 40.0)));
         let _ = anchor.set_min_size(Some(Size::Logical(LogicalSize::new(40.0, 40.0))));
+        let _ = anchor.set_shadow(false);
         return Ok(());
     }
 
@@ -1969,6 +2100,7 @@ fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String> {
         .transparent(true)
         .always_on_top(true)
         .decorations(false)
+        .shadow(false)
         .accept_first_mouse(true)
         .skip_taskbar(true)
         .visible(false)
@@ -1979,7 +2111,8 @@ fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
-    if app.get_webview_window("quick").is_some() {
+    if let Some(quick) = app.get_webview_window("quick") {
+        let _ = quick.set_shadow(false);
         return Ok(());
     }
 
@@ -1991,6 +2124,7 @@ fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> {
         .transparent(true)
         .always_on_top(true)
         .decorations(false)
+        .shadow(false)
         .accept_first_mouse(true)
         .skip_taskbar(true)
         .visible(false)
@@ -2447,11 +2581,12 @@ fn open_quick_window_with_action(
 }
 
 #[cfg(target_os = "macos")]
-fn focused_text_anchor_snapshot(app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
+fn focused_text_anchor_probe(app: &tauri::AppHandle) -> FocusedAnchorProbe {
     let script = r#"
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView"}
 set blockedTerms to {"address", "url", "navigation", "omnibox", "search", "buscar", "password", "contraseña", "contrasena", "email", "correo"}
 set browserBundles to {"com.apple.Safari", "com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac", "org.mozilla.firefox", "company.thebrowser.Browser"}
+set skipPrefix to "SKIP" & tab
 try
   tell application "System Events"
     set frontProcess to first application process whose frontmost is true
@@ -2465,33 +2600,33 @@ try
     end try
 
     ignoring case
-      if processName contains "whisloai" then return "NONE"
-      if processBundleId contains "whisloai" then return "NONE"
-      if processBundleId contains "com.whisloai.app" then return "NONE"
+      if processName contains "whisloai" then return skipPrefix & "internal_app" & tab & processBundleId
+      if processBundleId contains "whisloai" then return skipPrefix & "internal_bundle" & tab & processBundleId
+      if processBundleId contains "com.whisloai.app" then return skipPrefix & "internal_bundle" & tab & processBundleId
     end ignoring
 
     tell frontProcess
       set focusedElement to value of attribute "AXFocusedUIElement"
-      if focusedElement is missing value then return "NONE"
+      if focusedElement is missing value then return skipPrefix & "missing_focused_element" & tab & processBundleId
       set roleName to value of attribute "AXRole" of focusedElement
       set isEditable to false
       try
         set isEditable to value of attribute "AXEditable" of focusedElement
       end try
-      if textRoles does not contain roleName and isEditable is not true then return "NONE"
+      if textRoles does not contain roleName and isEditable is not true then return skipPrefix & "role_not_text_or_editable:" & roleName & tab & processBundleId
 
       set subroleName to ""
       try
         set subroleName to value of attribute "AXSubrole" of focusedElement as string
       end try
-      if subroleName is "AXSearchField" then return "NONE"
+      if subroleName is "AXSearchField" then return skipPrefix & "blocked_search_subrole" & tab & processBundleId
 
       set domInputType to ""
       try
         set domInputType to value of attribute "AXDOMInputType" of focusedElement as string
       end try
       ignoring case
-        if domInputType is "search" or domInputType is "password" or domInputType is "email" then return "NONE"
+        if domInputType is "search" or domInputType is "password" or domInputType is "email" then return skipPrefix & "blocked_dom_input_type:" & domInputType & tab & processBundleId
       end ignoring
 
       set metadataText to ""
@@ -2514,7 +2649,7 @@ try
       if shouldApplyBlockedTerms then
         ignoring case
           repeat with blocked in blockedTerms
-            if metadataText contains (blocked as string) then return "NONE"
+            if metadataText contains (blocked as string) then return skipPrefix & "blocked_browser_metadata:" & (blocked as string) & tab & processBundleId
           end repeat
         end ignoring
       end if
@@ -2523,80 +2658,115 @@ try
         set p to value of attribute "AXPosition" of focusedElement
         set s to value of attribute "AXSize" of focusedElement
       on error
-        return "NONE"
+        return skipPrefix & "missing_geometry" & tab & processBundleId
       end try
 
       set px to item 1 of p as integer
       set py to item 2 of p as integer
       set pw to item 1 of s as integer
       set ph to item 2 of s as integer
-      if pw < 2 or ph < 2 then return "NONE"
+      if pw < 2 or ph < 2 then return skipPrefix & "tiny_geometry:" & (pw as string) & "x" & (ph as string) & tab & processBundleId
 
       ignoring case
-        if domInputType is "password" then return "NONE"
-        if roleName contains "secure" then return "NONE"
-        if metadataText contains "password" then return "NONE"
+        if domInputType is "password" then return skipPrefix & "blocked_password_dom_type" & tab & processBundleId
+        if roleName contains "secure" then return skipPrefix & "blocked_secure_role:" & roleName & tab & processBundleId
+        if metadataText contains "password" then return skipPrefix & "blocked_password_metadata" & tab & processBundleId
       end ignoring
 
-      return processBundleId & tab & (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)
+      return "OK" & tab & processBundleId & tab & (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)
     end tell
   end tell
-on error
-  return "NONE"
+on error errMsg
+  return "ERROR" & tab & errMsg
 end try
 "#;
 
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .ok()?;
+    let output = Command::new("osascript").arg("-e").arg(script).output();
+    let output = match output {
+        Ok(value) => value,
+        Err(error) => {
+            return FocusedAnchorProbe {
+                snapshot: None,
+                reason: format!("probe_spawn_failed:{error}"),
+                bundle_id: None,
+            };
+        }
+    };
     if !output.status.success() {
-        return None;
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return FocusedAnchorProbe {
+            snapshot: None,
+            reason: if stderr.is_empty() {
+                "probe_non_zero_exit".to_string()
+            } else {
+                format!("probe_non_zero_exit:{stderr}")
+            },
+            bundle_id: None,
+        };
     }
 
     let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if raw.is_empty() || raw == "NONE" {
-        return None;
-    }
+    let Some(parsed) = parse_anchor_snapshot_probe_output(&raw) else {
+        return FocusedAnchorProbe {
+            snapshot: None,
+            reason: format!("probe_unparseable:{raw}"),
+            bundle_id: None,
+        };
+    };
 
-    let (bundle_raw, geometry_raw) = raw.split_once('\t')?;
-    let mut parts = geometry_raw.split(',').map(str::trim);
-    let x = parts.next()?.parse::<i32>().ok()?;
-    let y = parts.next()?.parse::<i32>().ok()?;
-    let w = parts.next()?.parse::<i32>().ok()?;
-    let h = parts.next()?.parse::<i32>().ok()?;
-    let scale_factor = monitor_scale_factor_for_logical_point(app, x, y);
-    let px = logical_to_physical(x, scale_factor);
-    let py = logical_to_physical(y, scale_factor);
-    let pw = logical_to_physical(w, scale_factor);
-    let ph = logical_to_physical(h, scale_factor);
-    let offset_x = logical_to_physical(10, scale_factor);
-    let offset_y = logical_to_physical(44, scale_factor);
-
-    let bundle_id = {
-        let clean = bundle_raw.trim();
-        if clean.is_empty() {
-            None
-        } else {
-            Some(clean.to_string())
+    match parsed {
+        AnchorSnapshotRawParse::Found {
+            bundle_id,
+            x,
+            y,
+            w,
+            h,
+        } => {
+            let scale_factor = monitor_scale_factor_for_logical_point(app, x, y);
+            let px = logical_to_physical(x, scale_factor);
+            let py = logical_to_physical(y, scale_factor);
+            let pw = logical_to_physical(w, scale_factor);
+            let ph = logical_to_physical(h, scale_factor);
+            let offset_x = logical_to_physical(10, scale_factor);
+            let offset_y = logical_to_physical(44, scale_factor);
+            let input_focus_point = if pw > 2 && ph > 2 {
+                Some((px + (pw / 2), py + (ph / 2)))
+            } else {
+                None
+            };
+            FocusedAnchorProbe {
+                snapshot: Some(FocusedAnchorSnapshot {
+                    position: AnchorPosition {
+                        x: px + pw - offset_x,
+                        y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
+                    },
+                    bundle_id: bundle_id.clone(),
+                    input_focus_point,
+                }),
+                reason: "focused_input_detected".to_string(),
+                bundle_id,
+            }
         }
-    };
-
-    let input_focus_point = if pw > 2 && ph > 2 {
-        Some((px + (pw / 2), py + (ph / 2)))
-    } else {
-        None
-    };
-
-    Some(FocusedAnchorSnapshot {
-        position: AnchorPosition {
-            x: px + pw - offset_x,
-            y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
+        AnchorSnapshotRawParse::Skip { reason, bundle_id } => FocusedAnchorProbe {
+            snapshot: None,
+            reason,
+            bundle_id,
         },
-        bundle_id,
-        input_focus_point,
-    })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn focused_text_anchor_snapshot(app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
+    focused_text_anchor_probe(app).snapshot
+}
+
+#[cfg(not(target_os = "macos"))]
+fn focused_text_anchor_probe(_app: &tauri::AppHandle) -> FocusedAnchorProbe {
+    FocusedAnchorProbe {
+        snapshot: None,
+        reason: "contextual_not_supported".to_string(),
+        bundle_id: None,
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -2628,11 +2798,15 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
 
     thread::spawn(move || {
         let mut last: Option<AnchorPosition> = None;
+        let mut last_contextual_decision: Option<String> = None;
+        let mut last_contextual_reason: Option<String> = None;
         let contextual_tracking_supported = contextual_anchor_tracking_supported();
 
         loop {
             let Some(anchor) = app.get_webview_window("anchor") else {
-                thread::sleep(std::time::Duration::from_millis(ANCHOR_MONITOR_ACTIVE_POLL_MS));
+                thread::sleep(std::time::Duration::from_millis(
+                    ANCHOR_MONITOR_ACTIVE_POLL_MS,
+                ));
                 continue;
             };
             let floating_mode = is_anchor_floating_mode(&app);
@@ -2642,6 +2816,8 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             if SETTINGS_WINDOW_OPEN.load(Ordering::SeqCst) {
                 let _ = anchor.hide();
                 last = None;
+                last_contextual_decision = None;
+                last_contextual_reason = None;
                 if !floating_mode {
                     clear_last_anchor_position(&app);
                     clear_last_anchor_timestamp(&app);
@@ -2655,6 +2831,8 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 if quick.is_visible().unwrap_or(false) {
                     let _ = anchor.hide();
                     last = None;
+                    last_contextual_decision = None;
+                    last_contextual_reason = None;
                     thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
                     continue;
                 }
@@ -2663,6 +2841,8 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             if !floating_mode && !contextual_tracking_supported {
                 let _ = anchor.hide();
                 last = None;
+                last_contextual_decision = None;
+                last_contextual_reason = None;
                 clear_last_anchor_position(&app);
                 clear_last_anchor_timestamp(&app);
                 clear_last_input_focus_target(&app);
@@ -2672,6 +2852,8 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
 
             if floating_mode {
                 clear_last_input_focus_target(&app);
+                last_contextual_decision = None;
+                last_contextual_reason = None;
 
                 let next = last_anchor_position(&app)
                     .or_else(|| {
@@ -2706,10 +2888,10 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 continue;
             }
 
-            let snapshot = focused_text_anchor_snapshot(&app);
-            let next = snapshot.as_ref().map(|entry| entry.position);
+            let probe = focused_text_anchor_probe(&app);
+            let next = probe.snapshot.as_ref().map(|entry| entry.position);
 
-            if let Some(entry) = snapshot.as_ref() {
+            if let Some(entry) = probe.snapshot.as_ref() {
                 save_last_anchor_position(&app, entry.position);
                 save_last_anchor_timestamp(&app, now_millis());
                 if let Some(bundle_id) = entry.bundle_id.as_deref() {
@@ -2734,6 +2916,21 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 clear_last_anchor_position(&app);
                 clear_last_anchor_timestamp(&app);
                 clear_last_input_focus_target(&app);
+            }
+
+            let decision = if next.is_some() { "show" } else { "hide" };
+            let should_log = last_contextual_decision.as_deref() != Some(decision)
+                || last_contextual_reason.as_deref() != Some(probe.reason.as_str());
+            if should_log {
+                let bundle_for_log = probe.bundle_id.as_deref().or_else(|| {
+                    probe
+                        .snapshot
+                        .as_ref()
+                        .and_then(|entry| entry.bundle_id.as_deref())
+                });
+                log_contextual_anchor_decision(decision, &probe.reason, bundle_for_log, next);
+                last_contextual_decision = Some(decision.to_string());
+                last_contextual_reason = Some(probe.reason.clone());
             }
 
             if next != last {
@@ -3985,12 +4182,10 @@ fn transcribe_with_local_whisper(
     normalize_local_transcription_output(text)
 }
 
-fn local_transcription_block_reason(is_macos: bool, is_rosetta_translated: bool) -> Option<&'static str> {
-    if is_macos && is_rosetta_translated {
-        return Some(
-            "Local transcription is not available while WhisloAI is running under Rosetta. Switch to API mode or run the native Apple Silicon build.",
-        );
-    }
+fn local_transcription_block_reason(
+    _is_macos: bool,
+    _is_rosetta_translated: bool,
+) -> Option<&'static str> {
     None
 }
 
@@ -4476,14 +4671,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        anchor_monitor_poll_interval_ms, download_progress_percent,
-        external_target_restore_reason, should_clear_external_cache_on_restore_reason,
-        ExternalAppTarget, INPUT_TARGET_TTL_MS,
-        local_prefers_openai_chat_endpoint, local_transcription_block_reason,
-        logical_to_physical, non_empty_trimmed, normalize_anchor_behavior,
-        normalize_local_transcription_output, normalize_provider_base_url, point_in_rect,
+        anchor_monitor_poll_interval_ms, audio_file_name, download_progress_percent,
+        external_target_restore_reason, local_prefers_openai_chat_endpoint,
+        local_transcription_block_reason, logical_to_physical, non_empty_trimmed,
+        normalize_anchor_behavior, normalize_local_transcription_output,
+        normalize_provider_base_url, parse_anchor_snapshot_probe_output, point_in_rect,
         provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
-        should_clear_external_cache_on_restore_error, transcribe_error,
+        should_clear_external_cache_on_restore_error,
+        should_clear_external_cache_on_restore_reason, transcribe_error, AnchorSnapshotRawParse,
+        ExternalAppTarget, INPUT_TARGET_TTL_MS,
     };
 
     #[test]
@@ -4611,8 +4807,8 @@ mod tests {
     }
 
     #[test]
-    fn local_transcription_guard_blocks_rosetta_on_macos() {
-        assert!(local_transcription_block_reason(true, true).is_some());
+    fn local_transcription_guard_does_not_block_rosetta() {
+        assert!(local_transcription_block_reason(true, true).is_none());
         assert!(local_transcription_block_reason(true, false).is_none());
         assert!(local_transcription_block_reason(false, true).is_none());
     }
@@ -4622,6 +4818,30 @@ mod tests {
         let result = transcribe_error("boom");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "boom".to_string());
+    }
+
+    #[test]
+    fn audio_file_name_handles_mime_variants() {
+        assert_eq!(
+            audio_file_name(Some("audio/webm;codecs=opus")),
+            "recording.webm"
+        );
+        assert_eq!(
+            audio_file_name(Some("audio/webm; codecs=opus")),
+            "recording.webm"
+        );
+        assert_eq!(
+            audio_file_name(Some("Audio/WEBM; codecs=opus")),
+            "recording.webm"
+        );
+        assert_eq!(
+            audio_file_name(Some("audio/mp4; codecs=mp4a.40.2")),
+            "recording.m4a"
+        );
+        assert_eq!(
+            audio_file_name(Some("audio/wav; charset=binary")),
+            "recording.wav"
+        );
     }
 
     #[test]
@@ -4645,7 +4865,9 @@ mod tests {
     fn restore_error_classification_clears_cache_for_not_running_targets() {
         assert!(should_clear_external_cache_on_restore_error("NOT_RUNNING"));
         assert!(should_clear_external_cache_on_restore_error("not running"));
-        assert!(!should_clear_external_cache_on_restore_error("Automation denied"));
+        assert!(!should_clear_external_cache_on_restore_error(
+            "Automation denied"
+        ));
     }
 
     #[test]
@@ -4685,10 +4907,48 @@ mod tests {
 
     #[test]
     fn cleanup_policy_clears_cache_for_invalid_stale_and_not_running_reasons() {
-        assert!(should_clear_external_cache_on_restore_reason("invalid_target"));
-        assert!(should_clear_external_cache_on_restore_reason("stale_target"));
+        assert!(should_clear_external_cache_on_restore_reason(
+            "invalid_target"
+        ));
+        assert!(should_clear_external_cache_on_restore_reason(
+            "stale_target"
+        ));
         assert!(should_clear_external_cache_on_restore_reason("not_running"));
-        assert!(!should_clear_external_cache_on_restore_reason("missing_target"));
-        assert!(!should_clear_external_cache_on_restore_reason("restore_error"));
+        assert!(!should_clear_external_cache_on_restore_reason(
+            "missing_target"
+        ));
+        assert!(!should_clear_external_cache_on_restore_reason(
+            "restore_error"
+        ));
+    }
+
+    #[test]
+    fn parse_anchor_snapshot_probe_output_reads_ok_payload() {
+        let parsed =
+            parse_anchor_snapshot_probe_output("OK\tcom.tinyspeck.slackmacgap\t100,200,300,48");
+        assert_eq!(
+            parsed,
+            Some(AnchorSnapshotRawParse::Found {
+                bundle_id: Some("com.tinyspeck.slackmacgap".to_string()),
+                x: 100,
+                y: 200,
+                w: 300,
+                h: 48,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_anchor_snapshot_probe_output_reads_skip_reason_and_bundle() {
+        let parsed = parse_anchor_snapshot_probe_output(
+            "SKIP\tblocked_dom_input_type:search\tcom.google.Chrome",
+        );
+        assert_eq!(
+            parsed,
+            Some(AnchorSnapshotRawParse::Skip {
+                reason: "blocked_dom_input_type:search".to_string(),
+                bundle_id: Some("com.google.Chrome".to_string()),
+            })
+        );
     }
 }
