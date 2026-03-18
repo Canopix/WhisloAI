@@ -107,6 +107,12 @@ body {
   color: #4f5f63;
 }
 
+.settings-installed-version {
+  font-family: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.1px;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);

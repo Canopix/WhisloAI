@@ -51,8 +51,8 @@
           </div>
 
           <div id="onboarding-accessibility-step" class="onboarding-step" data-step="accessibility" data-state="pending" hidden>
-            <h3 data-i18n="main.onboarding.accessibility.title">2) Input automation access</h3>
-            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required for automatic paste after processing.</p>
+            <h3 data-i18n="main.onboarding.accessibility.title">2) Accessibility access</h3>
+            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required so WhisloAI can trigger keyboard shortcuts in other apps.</p>
             <p id="onboarding-accessibility-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
             <div class="actions">
               <button
@@ -60,7 +60,7 @@
                 type="button"
                 data-i18n="main.onboarding.accessibility.test"
               >
-                Test input automation access
+                Check accessibility access
               </button>
               <button
                 id="onboarding-accessibility-settings-btn"
@@ -73,6 +73,37 @@
             </div>
             <p
               id="onboarding-accessibility-status"
+              class="hint onboarding-status"
+              data-tone="neutral"
+              data-i18n="main.onboarding.status.not_checked"
+            >
+              Not checked yet.
+            </p>
+          </div>
+
+          <div id="onboarding-automation-step" class="onboarding-step" data-step="automation" data-state="pending" hidden>
+            <h3 data-i18n="main.onboarding.automation.title">3) Automation (System Events)</h3>
+            <p class="hint" data-i18n="main.onboarding.automation.hint">Required on macOS so WhisloAI can verify and restore input context safely.</p>
+            <p id="onboarding-automation-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+            <div class="actions">
+              <button
+                id="onboarding-automation-btn"
+                type="button"
+                data-i18n="main.onboarding.automation.test"
+              >
+                Check automation access
+              </button>
+              <button
+                id="onboarding-automation-settings-btn"
+                type="button"
+                class="secondary"
+                data-i18n="main.onboarding.system_settings"
+              >
+                Open system settings
+              </button>
+            </div>
+            <p
+              id="onboarding-automation-status"
               class="hint onboarding-status"
               data-tone="neutral"
               data-i18n="main.onboarding.status.not_checked"

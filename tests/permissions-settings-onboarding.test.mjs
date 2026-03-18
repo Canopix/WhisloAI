@@ -33,10 +33,13 @@ test("settings includes a dedicated permissions section", () => {
       'id="permissions-card"',
       'id="permissions-microphone-status"',
       'id="permissions-accessibility-status"',
+      'id="permissions-automation-status"',
       'id="permissions-open-microphone-btn"',
       'id="permissions-open-accessibility-btn"',
+      'id="permissions-open-automation-btn"',
       'id="permissions-check-microphone-btn"',
       'id="permissions-check-accessibility-btn"',
+      'id="permissions-check-automation-btn"',
     ],
     "settings.html",
   );
@@ -54,6 +57,7 @@ test("settings i18n includes permissions labels and statuses", () => {
       '"settings.permissions.restart_hint":',
       '"settings.permissions.microphone.title":',
       '"settings.permissions.accessibility.title":',
+      '"settings.permissions.automation.title":',
       '"settings.permissions.open_settings":',
       '"settings.permissions.check":',
       '"settings.permissions.status.not_checked":',
@@ -64,6 +68,9 @@ test("settings i18n includes permissions labels and statuses", () => {
       '"settings.status.checking_accessibility_permission":',
       '"settings.status.accessibility_permission_ready_restart":',
       '"settings.status.accessibility_permission_missing":',
+      '"settings.status.checking_automation_permission":',
+      '"settings.status.automation_permission_ready_restart":',
+      '"settings.status.automation_permission_missing":',
     ],
     "src/i18n.js",
   );
@@ -76,15 +83,34 @@ test("settings logic wires permission actions", () => {
     [
       'document.getElementById("permissions-microphone-status")',
       'document.getElementById("permissions-accessibility-status")',
+      'document.getElementById("permissions-automation-status")',
       'document.getElementById("permissions-open-microphone-btn")',
       'document.getElementById("permissions-open-accessibility-btn")',
+      'document.getElementById("permissions-open-automation-btn")',
       'document.getElementById("permissions-check-microphone-btn")',
       'document.getElementById("permissions-check-accessibility-btn")',
+      'document.getElementById("permissions-check-automation-btn")',
       "setPermissionInlineStatus(",
       'invoke("open_permission_settings"',
-      'invoke("probe_auto_insert_permission")',
+      'invoke("probe_accessibility_permission")',
+      'invoke("probe_system_events_permission")',
     ],
     "src/settings.js",
+  );
+});
+
+test("onboarding includes dedicated automation step", () => {
+  const html = read("src/index.html");
+  expectContainsAll(
+    html,
+    [
+      'id="onboarding-accessibility-step"',
+      'id="onboarding-automation-step"',
+      'id="onboarding-automation-btn"',
+      'id="onboarding-automation-settings-btn"',
+      'id="onboarding-automation-status"',
+    ],
+    "src/index.html",
   );
 });
 

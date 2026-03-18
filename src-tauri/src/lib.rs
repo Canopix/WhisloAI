@@ -23,6 +23,7 @@ const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
 const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
 const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
 const TRAY_ICON_ID: &str = "whisloai-tray";
+const TRAY_MENU_VERSION: &str = "tray-version";
 const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
 const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
 const TRAY_MENU_CHECK_UPDATES: &str = "tray-check-updates";
@@ -37,8 +38,14 @@ const ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS: u64 = 700;
 #[derive(Default)]
 struct PendingQuickAction(Mutex<Option<String>>);
 
+#[derive(Debug, Clone)]
+struct ExternalAppTarget {
+    bundle_id: String,
+    captured_at_ms: u128,
+}
+
 #[derive(Default)]
-struct LastExternalAppBundle(Mutex<Option<String>>);
+struct LastExternalAppBundle(Mutex<Option<ExternalAppTarget>>);
 
 #[derive(Default)]
 struct LastAnchorPosition(Mutex<Option<AnchorPosition>>);
@@ -253,6 +260,7 @@ struct OnboardingStatus {
     completed: bool,
     platform: String,
     needs_accessibility: bool,
+    needs_automation: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -912,12 +920,28 @@ fn save_last_external_app_bundle(app: &tauri::AppHandle, bundle_id: &str) {
     }
     if let Some(state) = app.try_state::<LastExternalAppBundle>() {
         if let Ok(mut guard) = state.0.lock() {
-            *guard = Some(clean.to_string());
+            *guard = Some(ExternalAppTarget {
+                bundle_id: clean.to_string(),
+                captured_at_ms: now_millis(),
+            });
+        }
+    }
+}
+
+fn clear_last_external_app_bundle(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<LastExternalAppBundle>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = None;
         }
     }
 }
 
 fn last_external_app(app: &tauri::AppHandle) -> Option<String> {
+    let target = last_external_app_target(app)?;
+    Some(target.bundle_id)
+}
+
+fn last_external_app_target(app: &tauri::AppHandle) -> Option<ExternalAppTarget> {
     let state = app.try_state::<LastExternalAppBundle>()?;
     let guard = state.0.lock().ok()?;
     guard.clone()
@@ -1046,6 +1070,7 @@ fn refocus_last_input_target(app: &tauri::AppHandle) -> Result<RefocusAttempt, S
 
     let target_age_ms = now_millis().saturating_sub(target.captured_at_ms);
     if target_age_ms > INPUT_TARGET_TTL_MS || is_internal_app_bundle_id(&target.bundle_id) {
+        clear_last_input_focus_target(app);
         return Ok(RefocusAttempt {
             attempted: false,
             ok: false,
@@ -1057,6 +1082,7 @@ fn refocus_last_input_target(app: &tauri::AppHandle) -> Result<RefocusAttempt, S
         .map_err(|e| format!("Could not initialize input automation for refocus: {e}"))?;
 
     if !point_maps_to_any_monitor(app, target.x, target.y) {
+        clear_last_input_focus_target(app);
         return Ok(RefocusAttempt {
             attempted: false,
             ok: false,
@@ -1095,13 +1121,46 @@ fn escape_applescript_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn external_target_restore_reason(
+    target: Option<&ExternalAppTarget>,
+    now_ms: u128,
+) -> (&'static str, Option<u128>) {
+    let Some(target) = target else {
+        return ("missing_target", None);
+    };
+    if is_internal_app_bundle_id(&target.bundle_id) {
+        return ("invalid_target", None);
+    }
+
+    let target_age_ms = now_ms.saturating_sub(target.captured_at_ms);
+    if target_age_ms > INPUT_TARGET_TTL_MS {
+        return ("stale_target", Some(target_age_ms));
+    }
+
+    ("ready", Some(target_age_ms))
+}
+
+fn should_clear_external_cache_on_restore_error(error: &str) -> bool {
+    let normalized = error.trim().to_lowercase();
+    normalized == "not_running" || normalized.contains("not running")
+}
+
+fn should_clear_external_cache_on_restore_reason(reason: &str) -> bool {
+    matches!(reason, "invalid_target" | "stale_target" | "not_running")
+}
+
 #[cfg(target_os = "macos")]
 fn activate_bundle_id(bundle_id: &str) -> Result<(), String> {
     let escaped = escape_applescript_string(bundle_id);
     let script = format!(
         r#"
 try
-  tell application id "{escaped}" to activate
+  tell application "System Events"
+    if not (exists (application process 1 where bundle identifier is "{escaped}")) then
+      return "ERR:NOT_RUNNING"
+    end if
+    set frontmost of (first application process whose bundle identifier is "{escaped}") to true
+  end tell
   return "OK"
 on error errMsg
   return "ERR:" & errMsg
@@ -1132,18 +1191,127 @@ fn activate_bundle_id(_bundle_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn restore_last_external_app(app: &tauri::AppHandle) {
-    let Some(bundle_id) = last_external_app(app) else {
-        return;
-    };
-    if is_internal_app_bundle_id(&bundle_id) {
+#[cfg(target_os = "macos")]
+fn frontmost_external_bundle_id() -> Option<String> {
+    let script = r#"
+try
+  tell application "System Events"
+    set frontProcess to first application process whose frontmost is true
+    set processBundleId to ""
+    try
+      set processBundleId to bundle identifier of frontProcess as string
+    end try
+    return processBundleId
+  end tell
+on error
+  return ""
+end try
+"#;
+
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if raw.is_empty() || is_internal_app_bundle_id(&raw) {
+        return None;
+    }
+    Some(raw)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn frontmost_external_bundle_id() -> Option<String> {
+    None
+}
+
+fn refresh_last_external_app_bundle(app: &tauri::AppHandle) {
+    if let Some(bundle_id) = frontmost_external_bundle_id() {
+        save_last_external_app_bundle(app, &bundle_id);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RestoreExternalAppAttempt {
+    attempted: bool,
+    ok: bool,
+    target_age_ms: Option<u128>,
+    reason: &'static str,
+}
+
+fn log_external_restore_trace(context: &str, attempt: RestoreExternalAppAttempt) {
+    if !cfg!(debug_assertions) {
         return;
     }
+    let payload = serde_json::json!({
+        "event": "external_restore_trace",
+        "context": context,
+        "attempted": attempt.attempted,
+        "ok": attempt.ok,
+        "target_age_ms": attempt.target_age_ms.map(to_u64_saturating),
+        "reason": attempt.reason,
+    });
+    log::info!("{payload}");
+}
 
+fn restore_last_external_app(app: &tauri::AppHandle) -> RestoreExternalAppAttempt {
+    let now = now_millis();
+    let target = last_external_app_target(app);
+    let (reason, target_age_ms) = external_target_restore_reason(target.as_ref(), now);
+
+    if reason != "ready" {
+        if should_clear_external_cache_on_restore_reason(reason) {
+            clear_last_external_app_bundle(app);
+            clear_last_input_focus_target(app);
+        }
+        return RestoreExternalAppAttempt {
+            attempted: false,
+            ok: false,
+            target_age_ms,
+            reason,
+        };
+    }
+
+    let Some(target) = target else {
+        return RestoreExternalAppAttempt {
+            attempted: false,
+            ok: false,
+            target_age_ms,
+            reason: "missing_target",
+        };
+    };
+
+    let bundle_id = target.bundle_id;
     if let Err(error) = activate_bundle_id(&bundle_id) {
-        log::warn!("Could not restore focus to previous app '{bundle_id}': {error}");
-    } else {
-        thread::sleep(std::time::Duration::from_millis(120));
+        let normalized_reason = if should_clear_external_cache_on_restore_error(&error) {
+            "not_running"
+        } else {
+            "restore_error"
+        };
+        if should_clear_external_cache_on_restore_reason(normalized_reason) {
+            clear_last_external_app_bundle(app);
+            clear_last_input_focus_target(app);
+        }
+        if !cfg!(debug_assertions) {
+            log::warn!("Could not restore focus to previous app '{bundle_id}': {error}");
+        }
+        return RestoreExternalAppAttempt {
+            attempted: true,
+            ok: false,
+            target_age_ms,
+            reason: normalized_reason,
+        };
+    }
+
+    thread::sleep(std::time::Duration::from_millis(120));
+    RestoreExternalAppAttempt {
+        attempted: true,
+        ok: true,
+        target_age_ms,
+        reason: "ok",
     }
 }
 
@@ -1642,7 +1810,7 @@ fn simulate_copy_shortcut() -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn probe_input_automation_permission() -> Result<(), String> {
+fn ensure_accessibility_permission() -> Result<(), String> {
     use enigo::Direction::{Press, Release};
     use enigo::{Enigo, Key, Keyboard, Settings};
 
@@ -1653,13 +1821,15 @@ fn probe_input_automation_permission() -> Result<(), String> {
 
     enigo
         .key(modifier_key, Press)
-        .map_err(|e| format!("Automation permission denied: {e}"))?;
+        .map_err(|e| format!("Accessibility permission denied: {e}"))?;
     enigo
         .key(modifier_key, Release)
-        .map_err(|e| format!("Automation permission denied: {e}"))?;
+        .map_err(|e| format!("Accessibility permission denied: {e}"))?;
+    Ok(())
+}
 
-    // Anchor placement in contextual mode depends on AX lookups through System Events.
-    // This catches the case where key simulation works but UI scripting is still denied.
+#[cfg(target_os = "macos")]
+fn ensure_system_events_permission() -> Result<(), String> {
     let probe_script = r#"
 try
   tell application "System Events"
@@ -1675,7 +1845,7 @@ end try
         .arg("-e")
         .arg(probe_script)
         .output()
-        .map_err(|e| format!("Could not run macOS accessibility probe: {e}"))?;
+        .map_err(|e| format!("Could not run macOS automation probe: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let detail = if stderr.is_empty() {
@@ -1704,7 +1874,7 @@ end try
 }
 
 #[cfg(target_os = "windows")]
-fn probe_input_automation_permission() -> Result<(), String> {
+fn ensure_accessibility_permission() -> Result<(), String> {
     use enigo::Direction::{Press, Release};
     use enigo::{Enigo, Key, Keyboard, Settings};
 
@@ -1715,16 +1885,35 @@ fn probe_input_automation_permission() -> Result<(), String> {
 
     enigo
         .key(modifier_key, Press)
-        .map_err(|e| format!("Automation permission denied: {e}"))?;
+        .map_err(|e| format!("Accessibility permission denied: {e}"))?;
     enigo
         .key(modifier_key, Release)
-        .map_err(|e| format!("Automation permission denied: {e}"))?;
+        .map_err(|e| format!("Accessibility permission denied: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_system_events_permission() -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn ensure_accessibility_permission() -> Result<(), String> {
+    Err("Accessibility permission check is not supported on this platform.".to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn ensure_system_events_permission() -> Result<(), String> {
+    Ok(())
+}
+
 fn probe_input_automation_permission() -> Result<(), String> {
-    Err("Input automation permission check is not supported on this platform.".to_string())
+    ensure_accessibility_permission()?;
+    #[cfg(target_os = "macos")]
+    {
+        ensure_system_events_permission()?;
+    }
+    Ok(())
 }
 
 fn platform_name() -> String {
@@ -2124,6 +2313,7 @@ fn log_auto_insert_trace(
     refocus_attempted: bool,
     refocus_ok: bool,
     paste_ok: bool,
+    external_restore_reason: &str,
     total_ms: u128,
 ) {
     let payload = serde_json::json!({
@@ -2134,6 +2324,7 @@ fn log_auto_insert_trace(
         "refocus_attempted": refocus_attempted,
         "refocus_ok": refocus_ok,
         "paste_ok": paste_ok,
+        "external_restore_reason": external_restore_reason,
         "total_ms": to_u64_saturating(total_ms),
     });
 
@@ -2160,6 +2351,7 @@ fn open_quick_window_with_action(
 
     let result = (|| -> Result<(), String> {
         let remember_started = Instant::now();
+        refresh_last_external_app_bundle(app);
         external_cache_hit = last_external_app(app).is_some();
         phases.push((
             "remember_last_external_app".to_string(),
@@ -2697,7 +2889,10 @@ fn start_background_update_check(app: tauri::AppHandle, trigger: UpdateCheckTrig
 }
 
 fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
+    let version_label = format!("Version {}", app.package_info().version);
     let tray_menu = tauri::menu::MenuBuilder::new(app)
+        .text(TRAY_MENU_VERSION, version_label)
+        .separator()
         .text(TRAY_MENU_OPEN_APP, "Open WhisloAI")
         .text(TRAY_MENU_OPEN_SETTINGS, "Settings")
         .text(TRAY_MENU_CHECK_UPDATES, "Check for updates")
@@ -2708,9 +2903,10 @@ fn setup_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
 
     let mut tray_builder = tauri::tray::TrayIconBuilder::with_id(TRAY_ICON_ID)
         .menu(&tray_menu)
-        .tooltip("WhisloAI")
+        .tooltip(format!("WhisloAI v{}", app.package_info().version))
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_MENU_VERSION => {}
             TRAY_MENU_OPEN_APP => {
                 if let Err(error) = open_quick_window_with_action(app, Some("open-app".to_string()))
                 {
@@ -2759,6 +2955,11 @@ fn list_providers(app: tauri::AppHandle) -> Result<Vec<ProviderView>, String> {
 fn get_hotkeys(app: tauri::AppHandle) -> Result<HotkeyConfig, String> {
     let config = load_config(&app)?;
     Ok(config.hotkeys)
+}
+
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(app.package_info().version.to_string())
 }
 
 #[tauri::command]
@@ -2988,6 +3189,7 @@ fn get_onboarding_status(app: tauri::AppHandle) -> Result<OnboardingStatus, Stri
         completed: config.onboarding_completed,
         platform: platform_name(),
         needs_accessibility: cfg!(target_os = "macos"),
+        needs_automation: cfg!(target_os = "macos"),
     })
 }
 
@@ -3014,6 +3216,9 @@ fn open_permission_settings(permission: String) -> Result<(), String> {
             "accessibility" => {
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             }
+            "automation" => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            }
             _ => return Err("Unknown permission target.".to_string()),
         };
 
@@ -3029,6 +3234,7 @@ fn open_permission_settings(permission: String) -> Result<(), String> {
         let target = match permission.as_str() {
             "microphone" => "ms-settings:privacy-microphone",
             "accessibility" => "ms-settings:easeofaccess-keyboard",
+            "automation" => "ms-settings:easeofaccess-keyboard",
             _ => return Err("Unknown permission target.".to_string()),
         };
 
@@ -3049,6 +3255,16 @@ fn open_permission_settings(permission: String) -> Result<(), String> {
 #[tauri::command]
 fn probe_auto_insert_permission() -> Result<bool, String> {
     probe_input_automation_permission().map(|_| true)
+}
+
+#[tauri::command]
+fn probe_accessibility_permission() -> Result<bool, String> {
+    ensure_accessibility_permission().map(|_| true)
+}
+
+#[tauri::command]
+fn probe_system_events_permission() -> Result<bool, String> {
+    ensure_system_events_permission().map(|_| true)
 }
 
 #[tauri::command]
@@ -3250,7 +3466,8 @@ fn open_main_mode(app: tauri::AppHandle, mode: String) -> Result<(), String> {
 
 #[tauri::command]
 fn capture_selected_text(app: tauri::AppHandle) -> Result<String, String> {
-    restore_last_external_app(&app);
+    let restore_attempt = restore_last_external_app(&app);
+    log_external_restore_trace("capture_selected_text", restore_attempt);
     thread::sleep(std::time::Duration::from_millis(150));
     simulate_copy_shortcut()?;
     thread::sleep(std::time::Duration::from_millis(120));
@@ -3969,7 +4186,8 @@ fn auto_insert_text(
 
     hide_main_window(&app);
 
-    restore_last_external_app(&app);
+    let restore_attempt = restore_last_external_app(&app);
+    log_external_restore_trace("auto_insert_text", restore_attempt);
     thread::sleep(std::time::Duration::from_millis(180));
     let mut refocus_error_message: Option<String> = None;
     let refocus_attempt = if prefer_replace_selection {
@@ -4059,6 +4277,7 @@ fn auto_insert_text(
         refocus_attempted,
         refocus_ok,
         result.pasted,
+        restore_attempt.reason,
         total_started.elapsed().as_millis(),
     );
 
@@ -4211,6 +4430,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_providers,
             get_hotkeys,
+            get_app_version,
             get_prompt_settings,
             get_ui_settings,
             get_transcription_config,
@@ -4222,6 +4442,8 @@ pub fn run() {
             complete_onboarding,
             open_permission_settings,
             probe_auto_insert_permission,
+            probe_accessibility_permission,
+            probe_system_events_permission,
             log_dictation_trace,
             open_external_url,
             open_settings_window,
@@ -4255,10 +4477,13 @@ pub fn run() {
 mod tests {
     use super::{
         anchor_monitor_poll_interval_ms, download_progress_percent,
+        external_target_restore_reason, should_clear_external_cache_on_restore_reason,
+        ExternalAppTarget, INPUT_TARGET_TTL_MS,
         local_prefers_openai_chat_endpoint, local_transcription_block_reason,
         logical_to_physical, non_empty_trimmed, normalize_anchor_behavior,
         normalize_local_transcription_output, normalize_provider_base_url, point_in_rect,
-        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects, transcribe_error,
+        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
+        should_clear_external_cache_on_restore_error, transcribe_error,
     };
 
     #[test]
@@ -4414,5 +4639,56 @@ mod tests {
     #[test]
     fn anchor_monitor_poll_interval_slows_down_when_contextual_tracking_is_unavailable() {
         assert_eq!(anchor_monitor_poll_interval_ms(false, false), 700);
+    }
+
+    #[test]
+    fn restore_error_classification_clears_cache_for_not_running_targets() {
+        assert!(should_clear_external_cache_on_restore_error("NOT_RUNNING"));
+        assert!(should_clear_external_cache_on_restore_error("not running"));
+        assert!(!should_clear_external_cache_on_restore_error("Automation denied"));
+    }
+
+    #[test]
+    fn external_target_validation_detects_missing_invalid_stale_and_ready_targets() {
+        let now_ms = 1_000_000_u128;
+        assert_eq!(
+            external_target_restore_reason(None, now_ms),
+            ("missing_target", None)
+        );
+
+        let invalid = ExternalAppTarget {
+            bundle_id: "com.whisloai.desktop".to_string(),
+            captured_at_ms: now_ms,
+        };
+        assert_eq!(
+            external_target_restore_reason(Some(&invalid), now_ms),
+            ("invalid_target", None)
+        );
+
+        let stale = ExternalAppTarget {
+            bundle_id: "com.tinyspeck.slackmacgap".to_string(),
+            captured_at_ms: now_ms.saturating_sub(INPUT_TARGET_TTL_MS + 1),
+        };
+        let (stale_reason, stale_age_ms) = external_target_restore_reason(Some(&stale), now_ms);
+        assert_eq!(stale_reason, "stale_target");
+        assert!(stale_age_ms.unwrap_or(0) > INPUT_TARGET_TTL_MS);
+
+        let fresh = ExternalAppTarget {
+            bundle_id: "com.tinyspeck.slackmacgap".to_string(),
+            captured_at_ms: now_ms.saturating_sub(250),
+        };
+        assert_eq!(
+            external_target_restore_reason(Some(&fresh), now_ms),
+            ("ready", Some(250))
+        );
+    }
+
+    #[test]
+    fn cleanup_policy_clears_cache_for_invalid_stale_and_not_running_reasons() {
+        assert!(should_clear_external_cache_on_restore_reason("invalid_target"));
+        assert!(should_clear_external_cache_on_restore_reason("stale_target"));
+        assert!(should_clear_external_cache_on_restore_reason("not_running"));
+        assert!(!should_clear_external_cache_on_restore_reason("missing_target"));
+        assert!(!should_clear_external_cache_on_restore_reason("restore_error"));
     }
 }

@@ -11,6 +11,7 @@
       <header class="settings-hero">
         <h1 data-i18n="settings.hero.title">Settings</h1>
         <p data-i18n="settings.hero.subtitle">Configure your provider once, test it instantly.</p>
+        <p id="settings-installed-version" class="hint settings-installed-version">Installed version: —</p>
       </header>
 
       <div id="status" class="settings-status" data-tone="neutral" aria-live="polite" aria-atomic="true" data-i18n="settings.status.ready">Ready.</div>
@@ -103,7 +104,7 @@
             <div id="permissions-card" class="settings-card">
               <h2 data-i18n="settings.permissions.title">Permissions</h2>
               <p class="hint" data-i18n="settings.permissions.hint">
-                Manage permission checks for microphone and input automation.
+                Manage permission checks for microphone, accessibility, and automation (System Events).
               </p>
               <p class="hint permissions-restart-hint" data-i18n="settings.permissions.restart_hint">
                 After granting permissions, close WhisloAI completely and reopen it.
@@ -141,7 +142,7 @@
                 </section>
 
                 <section class="permissions-row">
-                  <h3 data-i18n="settings.permissions.accessibility.title">Input automation (Accessibility)</h3>
+                  <h3 data-i18n="settings.permissions.accessibility.title">Accessibility</h3>
                   <div class="permissions-actions">
                     <button
                       type="button"
@@ -162,6 +163,36 @@
                   </div>
                   <p
                     id="permissions-accessibility-status"
+                    class="hint permissions-inline-status"
+                    data-tone="neutral"
+                    data-i18n="settings.permissions.status.not_checked"
+                  >
+                    Not checked yet.
+                  </p>
+                </section>
+
+                <section class="permissions-row">
+                  <h3 data-i18n="settings.permissions.automation.title">Automation (System Events)</h3>
+                  <div class="permissions-actions">
+                    <button
+                      type="button"
+                      id="permissions-open-automation-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.open_settings"
+                    >
+                      Open system settings
+                    </button>
+                    <button
+                      type="button"
+                      id="permissions-check-automation-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.permissions.check"
+                    >
+                      Check access
+                    </button>
+                  </div>
+                  <p
+                    id="permissions-automation-status"
                     class="hint permissions-inline-status"
                     data-tone="neutral"
                     data-i18n="settings.permissions.status.not_checked"

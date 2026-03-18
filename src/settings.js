@@ -36,14 +36,21 @@ const anchorBehaviorToggleEls = Array.from(document.querySelectorAll(".anchor-be
 const anchorGifContextualEl = document.getElementById("anchor-gif-contextual");
 const anchorGifFloatingEl = document.getElementById("anchor-gif-floating");
 const creatorProfileLink = document.getElementById("creator-profile-link");
+const settingsInstalledVersionEl = document.getElementById("settings-installed-version");
 const permissionsMicrophoneStatusEl = document.getElementById("permissions-microphone-status");
 const permissionsAccessibilityStatusEl = document.getElementById("permissions-accessibility-status");
+const permissionsAutomationStatusEl = document.getElementById("permissions-automation-status");
 const permissionsOpenMicrophoneBtn = document.getElementById("permissions-open-microphone-btn");
 const permissionsOpenAccessibilityBtn = document.getElementById("permissions-open-accessibility-btn");
+const permissionsOpenAutomationBtn = document.getElementById("permissions-open-automation-btn");
 const permissionsCheckMicrophoneBtn = document.getElementById("permissions-check-microphone-btn");
 const permissionsCheckAccessibilityBtn = document.getElementById("permissions-check-accessibility-btn");
+const permissionsCheckAutomationBtn = document.getElementById("permissions-check-automation-btn");
 const permissionsAccessibilityRowEl = permissionsAccessibilityStatusEl
   ? permissionsAccessibilityStatusEl.closest(".permissions-row")
+  : null;
+const permissionsAutomationRowEl = permissionsAutomationStatusEl
+  ? permissionsAutomationStatusEl.closest(".permissions-row")
   : null;
 const anchorBehaviorContextualOptionEl = document.querySelector(
   '.anchor-behavior-option[data-anchor-behavior-option="contextual"]',
@@ -108,10 +115,19 @@ let selectedProviderId = null;
 let providersLoaded = false;
 let currentUiLanguagePreference = "system";
 let currentAnchorBehavior = "contextual";
+let installedAppVersion = "";
 let savedLocalModelsDir = "";
 let localModelPathValue = "";
 let activeWhisperDownloadModelId = null;
 const whisperModelProgressEls = new Map();
+
+function renderInstalledVersion() {
+  if (!settingsInstalledVersionEl) {
+    return;
+  }
+  const version = installedAppVersion || "—";
+  settingsInstalledVersionEl.textContent = t("settings.version.installed", { version });
+}
 
 function normalizeAnchorBehavior(value) {
   return String(value || "").trim().toLowerCase() === "floating" ? "floating" : "contextual";
@@ -251,12 +267,24 @@ function setPermissionInlineStatus(statusEl, key, tone = "neutral", rowState = "
 function applyRuntimePermissionUi(status) {
   const platform = String(status?.platform || "").trim().toLowerCase();
   const needsAccessibility = Boolean(status?.needsAccessibility);
+  const needsAutomation = Boolean(status?.needsAutomation);
   if (permissionsAccessibilityRowEl) {
     permissionsAccessibilityRowEl.hidden = !needsAccessibility;
+  }
+  if (permissionsAutomationRowEl) {
+    permissionsAutomationRowEl.hidden = !needsAutomation;
   }
   if (!needsAccessibility) {
     setPermissionInlineStatus(
       permissionsAccessibilityStatusEl,
+      "settings.permissions.status.not_required",
+      "neutral",
+      "ready",
+    );
+  }
+  if (!needsAutomation) {
+    setPermissionInlineStatus(
+      permissionsAutomationStatusEl,
       "settings.permissions.status.not_required",
       "neutral",
       "ready",
@@ -351,7 +379,7 @@ async function checkAccessibilityPermissionFromSettings(statusEl) {
   );
   setStatusKey("settings.status.checking_accessibility_permission", "loading");
   try {
-    await invoke("probe_auto_insert_permission");
+    await invoke("probe_accessibility_permission");
     setPermissionInlineStatus(
       statusEl,
       "settings.status.accessibility_permission_ready_restart",
@@ -367,6 +395,39 @@ async function checkAccessibilityPermissionFromSettings(statusEl) {
       "action_required",
     );
     setStatusKey("settings.status.accessibility_permission_missing", "error");
+  }
+}
+
+async function checkAutomationPermissionFromSettings(statusEl) {
+  if (!invoke) {
+    setStatusKey("settings.status.app_not_ready", "error");
+    return;
+  }
+
+  setPermissionInlineStatus(
+    statusEl,
+    "settings.status.checking_automation_permission",
+    "loading",
+    "checking",
+  );
+  setStatusKey("settings.status.checking_automation_permission", "loading");
+  try {
+    await invoke("probe_system_events_permission");
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.automation_permission_ready_restart",
+      "success",
+      "ready",
+    );
+    setStatusKey("settings.status.automation_permission_ready_restart", "success");
+  } catch (_) {
+    setPermissionInlineStatus(
+      statusEl,
+      "settings.status.automation_permission_missing",
+      "error",
+      "action_required",
+    );
+    setStatusKey("settings.status.automation_permission_missing", "error");
   }
 }
 
@@ -463,6 +524,7 @@ function ensureSelectControlValue(control, desiredValue, fallbackValue) {
 
 function applySettingsTranslations() {
   applyTranslations(document);
+  renderInstalledVersion();
   renderQuickModeOptions();
   bindPipelineScenarioInteractions();
   if (providersLoaded) {
@@ -1176,6 +1238,21 @@ async function loadUiSettings() {
   applySettingsTranslations();
 }
 
+async function loadAppVersion() {
+  if (!invoke) {
+    installedAppVersion = "";
+    renderInstalledVersion();
+    return;
+  }
+  try {
+    const version = await invoke("get_app_version");
+    installedAppVersion = String(version || "").trim();
+  } catch (_) {
+    installedAppVersion = "";
+  }
+  renderInstalledVersion();
+}
+
 async function saveUiPreferences(nextPreference, nextAnchorBehavior) {
   const normalizedLanguagePreference = String(nextPreference || "system");
   const normalizedAnchorBehavior = normalizeAnchorBehavior(nextAnchorBehavior);
@@ -1319,6 +1396,12 @@ if (permissionsOpenAccessibilityBtn) {
   });
 }
 
+if (permissionsOpenAutomationBtn) {
+  permissionsOpenAutomationBtn.addEventListener("click", async () => {
+    await openPermissionSettingsFromSettings("automation", permissionsAutomationStatusEl);
+  });
+}
+
 if (permissionsCheckMicrophoneBtn) {
   permissionsCheckMicrophoneBtn.addEventListener("click", async () => {
     await checkMicrophonePermissionFromSettings(permissionsMicrophoneStatusEl);
@@ -1328,6 +1411,12 @@ if (permissionsCheckMicrophoneBtn) {
 if (permissionsCheckAccessibilityBtn) {
   permissionsCheckAccessibilityBtn.addEventListener("click", async () => {
     await checkAccessibilityPermissionFromSettings(permissionsAccessibilityStatusEl);
+  });
+}
+
+if (permissionsCheckAutomationBtn) {
+  permissionsCheckAutomationBtn.addEventListener("click", async () => {
+    await checkAutomationPermissionFromSettings(permissionsAutomationStatusEl);
   });
 }
 
@@ -1646,12 +1735,19 @@ async function bootstrap() {
     "neutral",
     "pending",
   );
+  setPermissionInlineStatus(
+    permissionsAutomationStatusEl,
+    "settings.permissions.status.not_checked",
+    "neutral",
+    "pending",
+  );
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
   }
   bindPipelineScenarioInteractions();
 
   await loadUiSettings();
+  await loadAppVersion();
 
   if (!invoke) {
     renderPipelineGuides();

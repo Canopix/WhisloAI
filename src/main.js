@@ -40,6 +40,11 @@ const onboardingAccessibilityBtn = document.getElementById("onboarding-accessibi
 const onboardingAccessibilitySettingsBtn = document.getElementById("onboarding-accessibility-settings-btn");
 const onboardingAccessibilityStatus = document.getElementById("onboarding-accessibility-status");
 const onboardingAccessibilityStepState = document.getElementById("onboarding-accessibility-step-state");
+const onboardingAutomationStep = document.getElementById("onboarding-automation-step");
+const onboardingAutomationBtn = document.getElementById("onboarding-automation-btn");
+const onboardingAutomationSettingsBtn = document.getElementById("onboarding-automation-settings-btn");
+const onboardingAutomationStatus = document.getElementById("onboarding-automation-status");
+const onboardingAutomationStepState = document.getElementById("onboarding-automation-step-state");
 const onboardingFinishBtn = document.getElementById("onboarding-finish-btn");
 const onboardingSkipBtn = document.getElementById("onboarding-skip-btn");
 
@@ -301,6 +306,7 @@ function refreshOnboardingStepStateTranslations() {
   const states = [
     [onboardingMicStep, onboardingMicStepState],
     [onboardingAccessibilityStep, onboardingAccessibilityStepState],
+    [onboardingAutomationStep, onboardingAutomationStepState],
   ];
   states.forEach(([stepEl, stateEl]) => {
     if (!stepEl || !stateEl) {
@@ -377,7 +383,7 @@ async function testOnboardingAccessibilityPermission() {
   setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "checking");
 
   try {
-    await invoke("probe_auto_insert_permission");
+    await invoke("probe_accessibility_permission");
     setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.accessibility_ready", "success");
     setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "ready");
   } catch (error) {
@@ -386,6 +392,24 @@ async function testOnboardingAccessibilityPermission() {
     setStatus(formatError(error), "error");
   } finally {
     onboardingAccessibilityBtn.disabled = false;
+  }
+}
+
+async function testOnboardingAutomationPermission() {
+  onboardingAutomationBtn.disabled = true;
+  setOnboardingStatusKey(onboardingAutomationStatus, "main.status.testing_automation", "loading");
+  setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "checking");
+
+  try {
+    await invoke("probe_system_events_permission");
+    setOnboardingStatusKey(onboardingAutomationStatus, "main.status.automation_ready", "success");
+    setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "ready");
+  } catch (error) {
+    setOnboardingStatusKey(onboardingAutomationStatus, "main.status.automation_missing", "error");
+    setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "action_required");
+    setStatus(formatError(error), "error");
+  } finally {
+    onboardingAutomationBtn.disabled = false;
   }
 }
 
@@ -412,14 +436,19 @@ function applyOnboardingStatus(status) {
   const supportsPermissionSettings = platform === "macos" || platform === "windows";
   onboardingMicSettingsBtn.hidden = !supportsPermissionSettings;
   onboardingAccessibilitySettingsBtn.hidden = !supportsPermissionSettings;
+  onboardingAutomationSettingsBtn.hidden = !supportsPermissionSettings;
 
   const needsAccessibility = Boolean(status && status.needsAccessibility);
+  const needsAutomation = Boolean(status && status.needsAutomation);
   onboardingAccessibilityStep.hidden = !needsAccessibility;
+  onboardingAutomationStep.hidden = !needsAutomation;
 
   setOnboardingStatusKey(onboardingMicStatus, "main.onboarding.status.not_checked", "neutral");
   setOnboardingStatusKey(onboardingAccessibilityStatus, "main.onboarding.status.not_checked", "neutral");
+  setOnboardingStatusKey(onboardingAutomationStatus, "main.onboarding.status.not_checked", "neutral");
   setOnboardingStepState(onboardingMicStep, onboardingMicStepState, "pending");
   setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "pending");
+  setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "pending");
 
   const shouldShow = Boolean(status && !status.completed && !onboardingDismissedForSession);
   setOnboardingVisible(shouldShow);
@@ -431,6 +460,11 @@ function applyOnboardingStatus(status) {
       setTimeout(() => {
         testOnboardingAccessibilityPermission();
       }, 250);
+    }
+    if (needsAutomation) {
+      setTimeout(() => {
+        testOnboardingAutomationPermission();
+      }, 500);
     }
   }
 }
@@ -712,6 +746,8 @@ onboardingMicBtn.addEventListener("click", requestOnboardingMicrophonePermission
 onboardingMicSettingsBtn.addEventListener("click", () => openPermissionSettings("microphone"));
 onboardingAccessibilityBtn.addEventListener("click", testOnboardingAccessibilityPermission);
 onboardingAccessibilitySettingsBtn.addEventListener("click", () => openPermissionSettings("accessibility"));
+onboardingAutomationBtn.addEventListener("click", testOnboardingAutomationPermission);
+onboardingAutomationSettingsBtn.addEventListener("click", () => openPermissionSettings("automation"));
 onboardingFinishBtn.addEventListener("click", finishOnboarding);
 onboardingSkipBtn.addEventListener("click", skipOnboardingForSession);
 document.addEventListener("visibilitychange", handleMainVisibilityChange);
