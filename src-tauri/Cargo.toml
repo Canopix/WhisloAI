@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.9"
+version = "0.1.10"
 description = "WhisloAI desktop app"
 authors = ["you"]
 license = ""
@@ -38,3 +38,8 @@ local-transcription = ["symphonia", "whisper-rs"]
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 enigo = { version = "0.3.0", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-application-services = { version = "0.3.2", default-features = false, features = ["AXError", "AXUIElement", "AXValue", "HIServices", "libc"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSRunningApplication", "libc"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFNumber", "CFString", "CFCGTypes"] }

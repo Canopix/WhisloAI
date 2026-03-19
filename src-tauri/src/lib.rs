@@ -17,6 +17,9 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 
+#[cfg(target_os = "macos")]
+mod macos_ax;
+
 const KEYRING_SERVICE: &str = "whisloai";
 const QUICK_WINDOW_WIDTH_COMPACT: f64 = 252.0;
 const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
@@ -34,6 +37,12 @@ const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
 const REFOCUS_POST_RESTORE_MS: u64 = 35;
 const ANCHOR_MONITOR_ACTIVE_POLL_MS: u64 = 180;
 const ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS: u64 = 700;
+const ANCHOR_HIDE_DEBOUNCE_MS: u128 = 420;
+const ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS: u128 = 1_200;
+#[cfg(target_os = "macos")]
+const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 3;
+#[cfg(target_os = "macos")]
+const AX_NATIVE_FALLBACK_COOLDOWN_MS: u128 = 1_800;
 
 #[derive(Default)]
 struct PendingQuickAction(Mutex<Option<String>>);
@@ -67,6 +76,8 @@ static QUICK_OPEN_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 static UPDATE_CHECK_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "macos")]
 static RUNNING_UNDER_ROSETTA: OnceLock<bool> = OnceLock::new();
+#[cfg(target_os = "macos")]
+static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -1969,6 +1980,73 @@ struct FocusedAnchorProbe {
     snapshot: Option<FocusedAnchorSnapshot>,
     reason: String,
     bundle_id: Option<String>,
+    source: &'static str,
+    pid: Option<i32>,
+    role: Option<String>,
+    subrole: Option<String>,
+    dom_input_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct HybridFallbackState {
+    consecutive_native_failures: u32,
+    fallback_cooldown_until_ms: u128,
+}
+
+#[derive(Debug, Clone)]
+struct TimedContextualSnapshot {
+    snapshot: FocusedAnchorSnapshot,
+    captured_at_ms: u128,
+}
+
+fn should_hide_contextual_anchor(
+    now_ms: u128,
+    hide_candidate_since_ms: Option<u128>,
+    last_valid_snapshot_at_ms: Option<u128>,
+    hide_debounce_ms: u128,
+    snapshot_ttl_ms: u128,
+) -> bool {
+    if let Some(last_valid_snapshot_at_ms) = last_valid_snapshot_at_ms {
+        if now_ms.saturating_sub(last_valid_snapshot_at_ms) <= snapshot_ttl_ms {
+            return false;
+        }
+    }
+
+    let Some(hide_candidate_since_ms) = hide_candidate_since_ms else {
+        return false;
+    };
+
+    now_ms.saturating_sub(hide_candidate_since_ms) >= hide_debounce_ms
+}
+
+fn update_hybrid_fallback_state(
+    state: &mut HybridFallbackState,
+    native_fallback_eligible: bool,
+    now_ms: u128,
+    failure_threshold: u32,
+    cooldown_ms: u128,
+) -> bool {
+    if !native_fallback_eligible {
+        state.consecutive_native_failures = 0;
+        return false;
+    }
+
+    state.consecutive_native_failures = state.consecutive_native_failures.saturating_add(1);
+    if state.consecutive_native_failures < failure_threshold {
+        return false;
+    }
+    if now_ms < state.fallback_cooldown_until_ms {
+        return false;
+    }
+
+    state.fallback_cooldown_until_ms = now_ms.saturating_add(cooldown_ms);
+    state.consecutive_native_failures = 0;
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn native_fallback_state() -> &'static Mutex<HybridFallbackState> {
+    AX_NATIVE_FALLBACK_STATE.get_or_init(|| Mutex::new(HybridFallbackState::default()))
 }
 
 fn non_empty_optional(value: &str) -> Option<String> {
@@ -2060,12 +2138,22 @@ fn log_contextual_anchor_decision(
     reason: &str,
     bundle_id: Option<&str>,
     position: Option<AnchorPosition>,
+    source: &str,
+    pid: Option<i32>,
+    role: Option<&str>,
+    subrole: Option<&str>,
+    dom_input_type: Option<&str>,
 ) {
     let payload = serde_json::json!({
         "event": "anchor_contextual_decision",
         "decision": decision,
         "reason": reason,
         "bundle_id": bundle_id,
+        "source": source,
+        "pid": pid,
+        "role": role,
+        "subrole": subrole,
+        "dom_input_type": dom_input_type,
         "position": position.map(|point| serde_json::json!({ "x": point.x, "y": point.y })),
     });
     log::info!("{payload}");
@@ -2582,6 +2670,90 @@ fn open_quick_window_with_action(
 
 #[cfg(target_os = "macos")]
 fn focused_text_anchor_probe(app: &tauri::AppHandle) -> FocusedAnchorProbe {
+    let (native_probe, native_fallback_eligible) = focused_text_anchor_probe_native(app);
+    let should_try_fallback = if let Ok(mut state) = native_fallback_state().lock() {
+        update_hybrid_fallback_state(
+            &mut state,
+            native_fallback_eligible,
+            now_millis(),
+            AX_NATIVE_FALLBACK_FAILURE_THRESHOLD,
+            AX_NATIVE_FALLBACK_COOLDOWN_MS,
+        )
+    } else {
+        native_fallback_eligible
+    };
+
+    if !should_try_fallback {
+        return native_probe;
+    }
+
+    focused_text_anchor_probe_apple_script(app)
+}
+
+#[cfg(target_os = "macos")]
+fn focused_text_anchor_probe_native(app: &tauri::AppHandle) -> (FocusedAnchorProbe, bool) {
+    let macos_ax::AxProbeOutput {
+        decision,
+        fallback_eligible,
+        diagnostics,
+    } = macos_ax::probe_focused_anchor_snapshot();
+
+    let pid = diagnostics.pid;
+    let role = diagnostics.role.clone();
+    let subrole = diagnostics.subrole.clone();
+    let dom_input_type = diagnostics.dom_input_type.clone();
+    let diagnostics_bundle_id = diagnostics.bundle_id.clone();
+
+    let probe = match decision {
+        macos_ax::AxProbeDecision::Show(snapshot) => {
+            let scale_factor = monitor_scale_factor_for_logical_point(app, snapshot.x, snapshot.y);
+            let px = logical_to_physical(snapshot.x, scale_factor);
+            let py = logical_to_physical(snapshot.y, scale_factor);
+            let pw = logical_to_physical(snapshot.w, scale_factor);
+            let ph = logical_to_physical(snapshot.h, scale_factor);
+            let offset_x = logical_to_physical(10, scale_factor);
+            let offset_y = logical_to_physical(44, scale_factor);
+            let input_focus_point = if pw > 2 && ph > 2 {
+                Some((px + (pw / 2), py + (ph / 2)))
+            } else {
+                None
+            };
+            let bundle_id = snapshot.bundle_id.or(diagnostics_bundle_id.clone());
+            FocusedAnchorProbe {
+                snapshot: Some(FocusedAnchorSnapshot {
+                    position: AnchorPosition {
+                        x: px + pw - offset_x,
+                        y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
+                    },
+                    bundle_id: bundle_id.clone(),
+                    input_focus_point,
+                }),
+                reason: "focused_input_detected".to_string(),
+                bundle_id,
+                source: "native",
+                pid,
+                role: role.clone(),
+                subrole: subrole.clone(),
+                dom_input_type: dom_input_type.clone(),
+            }
+        }
+        macos_ax::AxProbeDecision::Hide(skip_reason) => FocusedAnchorProbe {
+            snapshot: None,
+            reason: skip_reason.as_reason(),
+            bundle_id: diagnostics_bundle_id,
+            source: "native",
+            pid,
+            role,
+            subrole,
+            dom_input_type,
+        },
+    };
+
+    (probe, fallback_eligible)
+}
+
+#[cfg(target_os = "macos")]
+fn focused_text_anchor_probe_apple_script(app: &tauri::AppHandle) -> FocusedAnchorProbe {
     let script = r#"
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView"}
 set blockedTerms to {"address", "url", "navigation", "omnibox", "search", "buscar", "password", "contraseña", "contrasena", "email", "correo"}
@@ -2689,6 +2861,11 @@ end try
                 snapshot: None,
                 reason: format!("probe_spawn_failed:{error}"),
                 bundle_id: None,
+                source: "fallback",
+                pid: None,
+                role: None,
+                subrole: None,
+                dom_input_type: None,
             };
         }
     };
@@ -2702,6 +2879,11 @@ end try
                 format!("probe_non_zero_exit:{stderr}")
             },
             bundle_id: None,
+            source: "fallback",
+            pid: None,
+            role: None,
+            subrole: None,
+            dom_input_type: None,
         };
     }
 
@@ -2711,6 +2893,11 @@ end try
             snapshot: None,
             reason: format!("probe_unparseable:{raw}"),
             bundle_id: None,
+            source: "fallback",
+            pid: None,
+            role: None,
+            subrole: None,
+            dom_input_type: None,
         };
     };
 
@@ -2745,12 +2932,22 @@ end try
                 }),
                 reason: "focused_input_detected".to_string(),
                 bundle_id,
+                source: "fallback",
+                pid: None,
+                role: None,
+                subrole: None,
+                dom_input_type: None,
             }
         }
         AnchorSnapshotRawParse::Skip { reason, bundle_id } => FocusedAnchorProbe {
             snapshot: None,
             reason,
             bundle_id,
+            source: "fallback",
+            pid: None,
+            role: None,
+            subrole: None,
+            dom_input_type: None,
         },
     }
 }
@@ -2766,6 +2963,11 @@ fn focused_text_anchor_probe(_app: &tauri::AppHandle) -> FocusedAnchorProbe {
         snapshot: None,
         reason: "contextual_not_supported".to_string(),
         bundle_id: None,
+        source: "unsupported",
+        pid: None,
+        role: None,
+        subrole: None,
+        dom_input_type: None,
     }
 }
 
@@ -2800,6 +3002,9 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
         let mut last: Option<AnchorPosition> = None;
         let mut last_contextual_decision: Option<String> = None;
         let mut last_contextual_reason: Option<String> = None;
+        let mut last_contextual_source: Option<String> = None;
+        let mut hide_candidate_since_ms: Option<u128> = None;
+        let mut last_valid_contextual_snapshot: Option<TimedContextualSnapshot> = None;
         let contextual_tracking_supported = contextual_anchor_tracking_supported();
 
         loop {
@@ -2818,6 +3023,9 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 last = None;
                 last_contextual_decision = None;
                 last_contextual_reason = None;
+                last_contextual_source = None;
+                hide_candidate_since_ms = None;
+                last_valid_contextual_snapshot = None;
                 if !floating_mode {
                     clear_last_anchor_position(&app);
                     clear_last_anchor_timestamp(&app);
@@ -2833,6 +3041,9 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                     last = None;
                     last_contextual_decision = None;
                     last_contextual_reason = None;
+                    last_contextual_source = None;
+                    hide_candidate_since_ms = None;
+                    last_valid_contextual_snapshot = None;
                     thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
                     continue;
                 }
@@ -2843,6 +3054,9 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 last = None;
                 last_contextual_decision = None;
                 last_contextual_reason = None;
+                last_contextual_source = None;
+                hide_candidate_since_ms = None;
+                last_valid_contextual_snapshot = None;
                 clear_last_anchor_position(&app);
                 clear_last_anchor_timestamp(&app);
                 clear_last_input_focus_target(&app);
@@ -2854,6 +3068,9 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 clear_last_input_focus_target(&app);
                 last_contextual_decision = None;
                 last_contextual_reason = None;
+                last_contextual_source = None;
+                hide_candidate_since_ms = None;
+                last_valid_contextual_snapshot = None;
 
                 let next = last_anchor_position(&app)
                     .or_else(|| {
@@ -2889,11 +3106,16 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             }
 
             let probe = focused_text_anchor_probe(&app);
-            let next = probe.snapshot.as_ref().map(|entry| entry.position);
+            let now_ms = now_millis();
 
             if let Some(entry) = probe.snapshot.as_ref() {
+                hide_candidate_since_ms = None;
+                last_valid_contextual_snapshot = Some(TimedContextualSnapshot {
+                    snapshot: entry.clone(),
+                    captured_at_ms: now_ms,
+                });
                 save_last_anchor_position(&app, entry.position);
-                save_last_anchor_timestamp(&app, now_millis());
+                save_last_anchor_timestamp(&app, now_ms);
                 if let Some(bundle_id) = entry.bundle_id.as_deref() {
                     save_last_external_app_bundle(&app, bundle_id);
                     if let Some((focus_x, focus_y)) = entry.input_focus_point {
@@ -2903,7 +3125,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                                 bundle_id: bundle_id.to_string(),
                                 x: focus_x.max(1),
                                 y: focus_y.max(1),
-                                captured_at_ms: now_millis(),
+                                captured_at_ms: now_ms,
                             },
                         );
                     } else {
@@ -2912,25 +3134,71 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 } else {
                     clear_last_input_focus_target(&app);
                 }
+            } else if hide_candidate_since_ms.is_none() {
+                hide_candidate_since_ms = Some(now_ms);
+            }
+
+            let should_hide = should_hide_contextual_anchor(
+                now_ms,
+                hide_candidate_since_ms,
+                last_valid_contextual_snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.captured_at_ms),
+                ANCHOR_HIDE_DEBOUNCE_MS,
+                ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS,
+            );
+
+            let effective_snapshot = if let Some(entry) = probe.snapshot.clone() {
+                Some(entry)
+            } else if should_hide {
+                last_valid_contextual_snapshot = None;
+                None
             } else {
+                last_valid_contextual_snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.snapshot.clone())
+            };
+
+            if probe.snapshot.is_none() && should_hide {
                 clear_last_anchor_position(&app);
                 clear_last_anchor_timestamp(&app);
                 clear_last_input_focus_target(&app);
             }
 
+            let next = effective_snapshot.as_ref().map(|entry| entry.position);
             let decision = if next.is_some() { "show" } else { "hide" };
             let should_log = last_contextual_decision.as_deref() != Some(decision)
-                || last_contextual_reason.as_deref() != Some(probe.reason.as_str());
+                || last_contextual_reason.as_deref() != Some(probe.reason.as_str())
+                || last_contextual_source.as_deref() != Some(probe.source);
             if should_log {
-                let bundle_for_log = probe.bundle_id.as_deref().or_else(|| {
-                    probe
-                        .snapshot
-                        .as_ref()
-                        .and_then(|entry| entry.bundle_id.as_deref())
-                });
-                log_contextual_anchor_decision(decision, &probe.reason, bundle_for_log, next);
+                let bundle_for_log = probe
+                    .bundle_id
+                    .as_deref()
+                    .or_else(|| {
+                        probe
+                            .snapshot
+                            .as_ref()
+                            .and_then(|entry| entry.bundle_id.as_deref())
+                    })
+                    .or_else(|| {
+                        effective_snapshot
+                            .as_ref()
+                            .and_then(|entry| entry.bundle_id.as_deref())
+                    });
+                log_contextual_anchor_decision(
+                    decision,
+                    &probe.reason,
+                    bundle_for_log,
+                    next,
+                    probe.source,
+                    probe.pid,
+                    probe.role.as_deref(),
+                    probe.subrole.as_deref(),
+                    probe.dom_input_type.as_deref(),
+                );
                 last_contextual_decision = Some(decision.to_string());
                 last_contextual_reason = Some(probe.reason.clone());
+                last_contextual_source = Some(probe.source.to_string());
             }
 
             if next != last {
@@ -4678,8 +4946,9 @@ mod tests {
         normalize_provider_base_url, parse_anchor_snapshot_probe_output, point_in_rect,
         provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
         should_clear_external_cache_on_restore_error,
-        should_clear_external_cache_on_restore_reason, transcribe_error, AnchorSnapshotRawParse,
-        ExternalAppTarget, INPUT_TARGET_TTL_MS,
+        should_clear_external_cache_on_restore_reason, should_hide_contextual_anchor,
+        transcribe_error, update_hybrid_fallback_state, AnchorSnapshotRawParse, ExternalAppTarget,
+        HybridFallbackState, INPUT_TARGET_TTL_MS,
     };
 
     #[test]
@@ -4859,6 +5128,73 @@ mod tests {
     #[test]
     fn anchor_monitor_poll_interval_slows_down_when_contextual_tracking_is_unavailable() {
         assert_eq!(anchor_monitor_poll_interval_ms(false, false), 700);
+    }
+
+    #[test]
+    fn contextual_hide_requires_ttl_expiry_and_debounce_elapsed() {
+        assert!(!should_hide_contextual_anchor(
+            1_400,
+            Some(1_000),
+            Some(1_000),
+            420,
+            1_200
+        ));
+        assert!(!should_hide_contextual_anchor(
+            2_050,
+            Some(1_900),
+            Some(500),
+            420,
+            1_200
+        ));
+        assert!(should_hide_contextual_anchor(
+            2_500,
+            Some(1_900),
+            Some(500),
+            420,
+            1_200
+        ));
+        assert!(!should_hide_contextual_anchor(
+            2_500,
+            None,
+            Some(500),
+            420,
+            1_200
+        ));
+    }
+
+    #[test]
+    fn hybrid_fallback_activates_after_threshold_and_respects_cooldown() {
+        let mut state = HybridFallbackState::default();
+
+        assert!(!update_hybrid_fallback_state(
+            &mut state, true, 100, 3, 1_000
+        ));
+        assert!(!update_hybrid_fallback_state(
+            &mut state, true, 200, 3, 1_000
+        ));
+        assert!(update_hybrid_fallback_state(
+            &mut state, true, 300, 3, 1_000
+        ));
+        assert_eq!(state.fallback_cooldown_until_ms, 1_300);
+        assert_eq!(state.consecutive_native_failures, 0);
+
+        assert!(!update_hybrid_fallback_state(
+            &mut state, true, 500, 3, 1_000
+        ));
+        assert!(!update_hybrid_fallback_state(
+            &mut state, true, 600, 3, 1_000
+        ));
+        assert!(!update_hybrid_fallback_state(
+            &mut state, true, 700, 3, 1_000
+        ));
+        assert!(update_hybrid_fallback_state(
+            &mut state, true, 1_300, 3, 1_000
+        ));
+
+        assert!(!update_hybrid_fallback_state(
+            &mut state, false, 1_301, 3, 1_000
+        ));
+        assert_eq!(state.consecutive_native_failures, 0);
     }
 
     #[test]
