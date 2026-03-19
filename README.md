@@ -12,7 +12,7 @@
 
 ## Download
 
-Download the latest prebuilt app for macOS, Windows, or Linux:
+Download the latest prebuilt app for macOS:
 
 - https://github.com/Canopix/WhisloAI/releases
 
@@ -119,7 +119,26 @@ codesign -dvv /Applications/WhisloAI.app 2>&1 | rg "Signature=|Authority=|TeamId
 
 Expected: `Authority=Developer ID Application...` and `TeamIdentifier=<your team id>`.
 
-If permissions still look enabled in System Settings but checks fail inside the app, reset TCC once and re-grant:
+If permissions still look enabled in System Settings but checks fail inside the app, use a full local reset first:
+
+```bash
+npm run reset:local:blank -- --yes
+```
+
+This command:
+
+1. Closes WhisloAI
+2. Removes `/Applications/WhisloAI.app`
+3. Cleans local app data in `~/Library` for `com.whisloai.desktop`
+4. Resets TCC entries for Accessibility, Automation (`AppleEvents`), and Microphone
+
+If you also want to remove keychain credentials:
+
+```bash
+WHISLOAI_RESET_KEYCHAIN=1 npm run reset:local:blank -- --yes
+```
+
+Manual fallback (TCC only):
 
 ```bash
 tccutil reset Accessibility com.whisloai.desktop
@@ -148,7 +167,7 @@ git push origin v0.1.1
 4. Configure updater signing secrets in GitHub repository settings:
    - `TAURI_SIGNING_PRIVATE_KEY` (content of your updater private key)
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional, only if your key has a password)
-5. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS, Windows, and Linux, signs updater assets, and attaches them to a GitHub Release.
+5. GitHub Actions workflow `.github/workflows/release.yml` builds artifacts for macOS (Apple Silicon + Intel), signs updater assets, and attaches them to a GitHub Release.
 6. Note: updater signing (`TAURI_SIGNING_PRIVATE_KEY`) is different from macOS app codesigning (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_TEAM_ID`).
 
 ## Usage
