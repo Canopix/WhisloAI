@@ -3002,7 +3002,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
         let mut last: Option<AnchorPosition> = None;
         let mut last_contextual_decision: Option<String> = None;
         let mut last_contextual_reason: Option<String> = None;
-        let mut last_contextual_source: Option<String> = None;
         let mut hide_candidate_since_ms: Option<u128> = None;
         let mut last_valid_contextual_snapshot: Option<TimedContextualSnapshot> = None;
         let contextual_tracking_supported = contextual_anchor_tracking_supported();
@@ -3023,7 +3022,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 last = None;
                 last_contextual_decision = None;
                 last_contextual_reason = None;
-                last_contextual_source = None;
                 hide_candidate_since_ms = None;
                 last_valid_contextual_snapshot = None;
                 if !floating_mode {
@@ -3041,7 +3039,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                     last = None;
                     last_contextual_decision = None;
                     last_contextual_reason = None;
-                    last_contextual_source = None;
                     hide_candidate_since_ms = None;
                     last_valid_contextual_snapshot = None;
                     thread::sleep(std::time::Duration::from_millis(poll_interval_ms));
@@ -3054,7 +3051,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 last = None;
                 last_contextual_decision = None;
                 last_contextual_reason = None;
-                last_contextual_source = None;
                 hide_candidate_since_ms = None;
                 last_valid_contextual_snapshot = None;
                 clear_last_anchor_position(&app);
@@ -3068,7 +3064,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 clear_last_input_focus_target(&app);
                 last_contextual_decision = None;
                 last_contextual_reason = None;
-                last_contextual_source = None;
                 hide_candidate_since_ms = None;
                 last_valid_contextual_snapshot = None;
 
@@ -3168,8 +3163,7 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
             let next = effective_snapshot.as_ref().map(|entry| entry.position);
             let decision = if next.is_some() { "show" } else { "hide" };
             let should_log = last_contextual_decision.as_deref() != Some(decision)
-                || last_contextual_reason.as_deref() != Some(probe.reason.as_str())
-                || last_contextual_source.as_deref() != Some(probe.source);
+                || last_contextual_reason.as_deref() != Some(probe.reason.as_str());
             if should_log {
                 let bundle_for_log = probe
                     .bundle_id
@@ -3198,7 +3192,6 @@ fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 );
                 last_contextual_decision = Some(decision.to_string());
                 last_contextual_reason = Some(probe.reason.clone());
-                last_contextual_source = Some(probe.source.to_string());
             }
 
             if next != last {

@@ -121,23 +121,8 @@ pub fn probe_focused_anchor_snapshot() -> AxProbeOutput {
     let mut diagnostics = AxProbeDiagnostics::default();
     let system_wide = unsafe { AXUIElement::new_system_wide() };
 
-    let focused_value = match copy_attribute_value(&system_wide, "AXFocusedUIElement") {
-        Ok(Some(value)) => value,
-        Ok(None) => {
-            return skip_output(AxProbeSkipReason::MissingFocusedElement, true, diagnostics)
-        }
-        Err(error) => {
-            diagnostics.push_error("AXFocusedUIElement", error);
-            return skip_output(AxProbeSkipReason::MissingFocusedElement, true, diagnostics);
-        }
-    };
-
-    let focused_element = match focused_value.downcast::<AXUIElement>() {
-        Ok(value) => value,
-        Err(_) => {
-            diagnostics.push_custom_error("AXFocusedUIElement:not_ax_ui_element");
-            return skip_output(AxProbeSkipReason::MissingFocusedElement, true, diagnostics);
-        }
+    let Some(focused_element) = resolve_focused_element(&system_wide, &mut diagnostics) else {
+        return skip_output(AxProbeSkipReason::MissingFocusedElement, true, diagnostics);
     };
 
     diagnostics.pid = read_element_pid(&focused_element, &mut diagnostics);
@@ -338,6 +323,53 @@ fn collect_metadata_text(element: &AXUIElement, diagnostics: &mut AxProbeDiagnos
     }
 
     chunks.join(" ")
+}
+
+fn resolve_focused_element(
+    system_wide: &AXUIElement,
+    diagnostics: &mut AxProbeDiagnostics,
+) -> Option<CFRetained<AXUIElement>> {
+    if let Some(value) =
+        copy_attribute_as_ax_element(system_wide, "AXFocusedUIElement", diagnostics)
+    {
+        return Some(value);
+    }
+
+    let focused_application =
+        copy_attribute_as_ax_element(system_wide, "AXFocusedApplication", diagnostics)?;
+
+    if let Some(value) =
+        copy_attribute_as_ax_element(&focused_application, "AXFocusedUIElement", diagnostics)
+    {
+        return Some(value);
+    }
+
+    let focused_window =
+        copy_attribute_as_ax_element(&focused_application, "AXFocusedWindow", diagnostics)?;
+    copy_attribute_as_ax_element(&focused_window, "AXFocusedUIElement", diagnostics)
+}
+
+fn copy_attribute_as_ax_element(
+    element: &AXUIElement,
+    attribute_name: &str,
+    diagnostics: &mut AxProbeDiagnostics,
+) -> Option<CFRetained<AXUIElement>> {
+    let value = match copy_attribute_value(element, attribute_name) {
+        Ok(Some(value)) => value,
+        Ok(None) => return None,
+        Err(error) => {
+            diagnostics.push_error(attribute_name, error);
+            return None;
+        }
+    };
+
+    match value.downcast::<AXUIElement>() {
+        Ok(value) => Some(value),
+        Err(_) => {
+            diagnostics.push_custom_error(&format!("{attribute_name}:not_ax_ui_element"));
+            None
+        }
+    }
 }
 
 fn copy_attribute_value(
