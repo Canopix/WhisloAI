@@ -120,6 +120,7 @@ struct AxClassificationCandidate {
 pub fn probe_focused_anchor_snapshot() -> AxProbeOutput {
     let mut diagnostics = AxProbeDiagnostics::default();
     let system_wide = unsafe { AXUIElement::new_system_wide() };
+    enrich_diagnostics_with_focused_application(&system_wide, &mut diagnostics);
 
     let Some(focused_element) = resolve_focused_element(&system_wide, &mut diagnostics) else {
         return skip_output(AxProbeSkipReason::MissingFocusedElement, true, diagnostics);
@@ -347,6 +348,24 @@ fn resolve_focused_element(
     let focused_window =
         copy_attribute_as_ax_element(&focused_application, "AXFocusedWindow", diagnostics)?;
     copy_attribute_as_ax_element(&focused_window, "AXFocusedUIElement", diagnostics)
+}
+
+fn enrich_diagnostics_with_focused_application(
+    system_wide: &AXUIElement,
+    diagnostics: &mut AxProbeDiagnostics,
+) {
+    let Some(focused_application) =
+        copy_attribute_as_ax_element(system_wide, "AXFocusedApplication", diagnostics)
+    else {
+        return;
+    };
+
+    if diagnostics.pid.is_none() {
+        diagnostics.pid = read_element_pid(&focused_application, diagnostics);
+    }
+    if diagnostics.bundle_id.is_none() {
+        diagnostics.bundle_id = diagnostics.pid.and_then(bundle_id_for_pid);
+    }
 }
 
 fn copy_attribute_as_ax_element(

@@ -1,6 +1,6 @@
 {
   "name": "whisloai",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "description": "Minimal desktop writing helper built with Tauri",
