@@ -33,7 +33,9 @@ pub(crate) fn get_ui_settings(app: tauri::AppHandle) -> Result<UiSettings, Strin
 }
 
 #[tauri::command]
-pub(crate) fn get_transcription_config(app: tauri::AppHandle) -> Result<TranscriptionConfig, String> {
+pub(crate) fn get_transcription_config(
+    app: tauri::AppHandle,
+) -> Result<TranscriptionConfig, String> {
     let config = load_config(&app)?;
     Ok(config.transcription)
 }

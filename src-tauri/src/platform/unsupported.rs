@@ -40,7 +40,9 @@ impl PlatformBackend for UnsupportedBackend {
 
     fn simulate_modifier_shortcut(&self, character: char) -> Result<(), String> {
         if character.eq_ignore_ascii_case(&'v') {
-            return Err("Automatic paste is not supported on this platform in the MVP.".to_string());
+            return Err(
+                "Automatic paste is not supported on this platform in the MVP.".to_string(),
+            );
         }
         if character.eq_ignore_ascii_case(&'c') {
             return Err("Automatic copy is not supported on this platform in the MVP.".to_string());

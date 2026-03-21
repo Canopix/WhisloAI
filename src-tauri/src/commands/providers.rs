@@ -150,7 +150,10 @@ pub(crate) fn save_provider(
 }
 
 #[tauri::command]
-pub(crate) fn set_active_provider(app: tauri::AppHandle, provider_id: String) -> Result<(), String> {
+pub(crate) fn set_active_provider(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<(), String> {
     let mut config = load_config(&app)?;
 
     if !config

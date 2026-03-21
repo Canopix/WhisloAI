@@ -32,10 +32,9 @@ pub(crate) async fn transcribe_audio(
     })?;
 
     if config.transcription.mode == "local" {
-        if let Some(reason) = local_transcription_block_reason(
-            cfg!(target_os = "macos"),
-            is_running_under_rosetta(),
-        ) {
+        if let Some(reason) =
+            local_transcription_block_reason(cfg!(target_os = "macos"), is_running_under_rosetta())
+        {
             return transcribe_error(reason.to_string());
         }
 

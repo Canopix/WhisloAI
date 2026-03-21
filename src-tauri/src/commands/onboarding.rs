@@ -11,6 +11,7 @@ pub(crate) fn get_onboarding_status(app: tauri::AppHandle) -> Result<OnboardingS
         platform: capabilities.platform.to_string(),
         needs_accessibility: capabilities.needs_accessibility,
         needs_automation: capabilities.needs_automation,
+        supports_contextual_anchor: capabilities.supports_contextual_anchor,
     })
 }
 

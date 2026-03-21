@@ -273,6 +273,7 @@ struct OnboardingStatus {
     platform: String,
     needs_accessibility: bool,
     needs_automation: bool,
+    supports_contextual_anchor: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -2802,7 +2803,36 @@ fn focused_text_anchor_snapshot(app: &tauri::AppHandle) -> Option<FocusedAnchorS
     focused_text_anchor_probe(app).snapshot
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn focused_text_anchor_probe(_app: &tauri::AppHandle) -> FocusedAnchorProbe {
+    let probe = platform::focused_anchor_probe();
+    let snapshot = probe.snapshot.map(|entry| FocusedAnchorSnapshot {
+        position: AnchorPosition {
+            x: entry.anchor_x,
+            y: entry.anchor_y,
+        },
+        bundle_id: probe.bundle_id.clone(),
+        input_focus_point: Some((entry.focus_x, entry.focus_y)),
+    });
+
+    FocusedAnchorProbe {
+        snapshot,
+        reason: probe.reason,
+        bundle_id: probe.bundle_id,
+        source: probe.source,
+        pid: probe.pid,
+        role: probe.role,
+        subrole: None,
+        dom_input_type: None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn focused_text_anchor_snapshot(app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
+    focused_text_anchor_probe(app).snapshot
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn focused_text_anchor_probe(_app: &tauri::AppHandle) -> FocusedAnchorProbe {
     FocusedAnchorProbe {
         snapshot: None,
@@ -2816,7 +2846,7 @@ fn focused_text_anchor_probe(_app: &tauri::AppHandle) -> FocusedAnchorProbe {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn focused_text_anchor_snapshot(_app: &tauri::AppHandle) -> Option<FocusedAnchorSnapshot> {
     None
 }
@@ -3403,14 +3433,14 @@ pub fn run() {
 mod tests {
     use super::{
         audio_file_name, download_progress_percent, external_target_restore_reason,
-        local_prefers_openai_chat_endpoint, local_transcription_block_reason,
-        logical_to_physical, non_empty_trimmed, normalize_anchor_behavior,
-        normalize_local_transcription_output, normalize_provider_base_url,
-        parse_anchor_snapshot_probe_output, point_in_rect, provider_endpoint,
-        sanitize_scale_factor, scale_for_logical_point_in_rects,
-        should_clear_external_cache_on_restore_error, should_clear_external_cache_on_restore_reason,
-        should_hide_contextual_anchor, transcribe_error, update_hybrid_fallback_state,
-        AnchorSnapshotRawParse, ExternalAppTarget, HybridFallbackState, INPUT_TARGET_TTL_MS,
+        local_prefers_openai_chat_endpoint, local_transcription_block_reason, logical_to_physical,
+        non_empty_trimmed, normalize_anchor_behavior, normalize_local_transcription_output,
+        normalize_provider_base_url, parse_anchor_snapshot_probe_output, point_in_rect,
+        provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
+        should_clear_external_cache_on_restore_error,
+        should_clear_external_cache_on_restore_reason, should_hide_contextual_anchor,
+        transcribe_error, update_hybrid_fallback_state, AnchorSnapshotRawParse, ExternalAppTarget,
+        HybridFallbackState, INPUT_TARGET_TTL_MS,
     };
 
     #[test]
