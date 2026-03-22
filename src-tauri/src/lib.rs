@@ -1,15 +1,5 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::thread;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tauri::path::BaseDirectory;
-use tauri::{Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-use tauri_plugin_updater::UpdaterExt;
 
 mod app;
 mod commands;
@@ -57,10 +47,6 @@ static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock
 fn native_fallback_state() -> &'static Mutex<HybridFallbackState> {
     AX_NATIVE_FALLBACK_STATE.get_or_init(|| Mutex::new(HybridFallbackState::default()))
 }
-
-
-#[cfg(feature = "local-transcription")]
-
 #[cfg(target_os = "macos")]
 fn is_running_under_rosetta() -> bool {
     *RUNNING_UNDER_ROSETTA.get_or_init(|| {
