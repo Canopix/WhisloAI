@@ -6,12 +6,12 @@ use tauri::{Manager, PhysicalPosition, Position};
 use crate::domain::anchor::{
     anchor_monitor_poll_interval_ms, contextual_anchor_tracking_supported,
     focused_text_anchor_probe, log_contextual_anchor_decision, should_hide_contextual_anchor,
-    AnchorPosition, TimedContextualSnapshot, ANCHOR_MONITOR_ACTIVE_POLL_MS,
+    AnchorPosition, TimedContextualSnapshot, ANCHOR_HIDE_DEBOUNCE_MS,
+    ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS, ANCHOR_MONITOR_ACTIVE_POLL_MS,
 };
 use crate::domain::config::InputFocusTarget;
 use crate::overlay::refocus::*;
 use crate::overlay::windows::clamp_anchor_window_position;
-use crate::{ANCHOR_HIDE_DEBOUNCE_MS, ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS};
 
 pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
     if ANCHOR_MONITOR_STARTED

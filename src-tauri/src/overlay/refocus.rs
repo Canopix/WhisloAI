@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,8 +16,11 @@ use crate::domain::geometry::to_u64_saturating;
 use crate::platform;
 use crate::{
     focused_text_anchor_snapshot, open_quick_window_with_action, point_maps_to_any_monitor,
-    INPUT_TARGET_TTL_MS, REFOCUS_CLICK_STABILIZE_MS, REFOCUS_POST_RESTORE_MS,
 };
+
+pub(crate) const INPUT_TARGET_TTL_MS: u128 = 90_000;
+const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
+const REFOCUS_POST_RESTORE_MS: u64 = 35;
 
 #[derive(Default)]
 pub(crate) struct PendingQuickAction(pub(crate) Mutex<Option<String>>);

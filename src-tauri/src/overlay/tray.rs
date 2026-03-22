@@ -8,10 +8,13 @@ use tauri_plugin_updater::UpdaterExt;
 use crate::commands;
 use crate::overlay::refocus::{APP_QUIT_REQUESTED, TRAY_READY, UPDATE_CHECK_IN_FLIGHT};
 use crate::overlay::windows::open_quick_window_with_action;
-use crate::{
-    TRAY_ICON_ID, TRAY_MENU_CHECK_UPDATES, TRAY_MENU_OPEN_APP, TRAY_MENU_OPEN_SETTINGS,
-    TRAY_MENU_QUIT, TRAY_MENU_VERSION,
-};
+
+const TRAY_ICON_ID: &str = "whisloai-tray";
+const TRAY_MENU_VERSION: &str = "tray-version";
+const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
+const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
+const TRAY_MENU_CHECK_UPDATES: &str = "tray-check-updates";
+const TRAY_MENU_QUIT: &str = "tray-quit";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum UpdateCheckTrigger {

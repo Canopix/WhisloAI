@@ -3,14 +3,16 @@ use std::time::Instant;
 
 use tauri::{LogicalSize, Manager, PhysicalPosition, Position, Size};
 
-use crate::domain::anchor::AnchorPosition;
 use crate::domain::geometry::{
-    logical_to_physical, point_in_rect, sanitize_scale_factor, scale_for_logical_point_in_rects,
-    to_u64_saturating,
+    point_in_rect, sanitize_scale_factor, scale_for_logical_point_in_rects, to_u64_saturating,
 };
 use crate::overlay::anchor_monitor::start_anchor_monitor_once;
 use crate::overlay::refocus::*;
-use crate::{QUICK_WINDOW_HEIGHT_COMPACT, QUICK_WINDOW_WIDTH_COMPACT};
+
+pub(crate) const QUICK_WINDOW_WIDTH_COMPACT: f64 = 252.0;
+pub(crate) const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
+pub(crate) const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
+pub(crate) const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
 
 pub(crate) fn show_main_window_for_onboarding(app: &tauri::AppHandle) {
     if let Some(main) = app.get_webview_window("main") {

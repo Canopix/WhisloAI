@@ -1,5 +1,22 @@
+use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+
+use crate::domain::geometry::logical_to_physical;
+use crate::overlay::refocus::now_millis;
+use crate::overlay::windows::monitor_scale_factor_for_logical_point;
+
 pub(crate) const ANCHOR_MONITOR_ACTIVE_POLL_MS: u64 = 180;
 pub(crate) const ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS: u64 = 700;
+pub(crate) const ANCHOR_HIDE_DEBOUNCE_MS: u128 = 420;
+pub(crate) const ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS: u128 = 1_200;
+
+#[cfg(target_os = "macos")]
+const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 3;
+#[cfg(target_os = "macos")]
+const AX_NATIVE_FALLBACK_COOLDOWN_MS: u128 = 1_800;
+
+#[cfg(target_os = "macos")]
+static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock::new();
 
 pub(crate) fn anchor_monitor_poll_interval_ms(
     floating_mode: bool,
@@ -134,6 +151,11 @@ pub(crate) fn update_hybrid_fallback_state(
     state.fallback_cooldown_until_ms = now_ms.saturating_add(cooldown_ms);
     state.consecutive_native_failures = 0;
     true
+}
+
+#[cfg(target_os = "macos")]
+fn native_fallback_state() -> &'static Mutex<HybridFallbackState> {
+    AX_NATIVE_FALLBACK_STATE.get_or_init(|| Mutex::new(HybridFallbackState::default()))
 }
 
 pub(crate) fn non_empty_optional(value: &str) -> Option<String> {
@@ -593,11 +615,3 @@ pub(crate) fn focused_text_anchor_snapshot(
 pub(crate) fn contextual_anchor_tracking_supported() -> bool {
     crate::platform::capabilities().supports_contextual_anchor
 }
-use std::process::Command;
-
-use crate::domain::geometry::logical_to_physical;
-use crate::overlay::refocus::now_millis;
-use crate::overlay::windows::monitor_scale_factor_for_logical_point;
-use crate::{
-    native_fallback_state, AX_NATIVE_FALLBACK_COOLDOWN_MS, AX_NATIVE_FALLBACK_FAILURE_THRESHOLD,
-};

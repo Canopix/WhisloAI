@@ -1,7 +1,6 @@
 use base64::Engine as _;
 use keyring::Entry;
 use reqwest::RequestBuilder;
-use serde_json;
 use std::collections::HashMap;
 
 use super::config::*;
@@ -138,8 +137,7 @@ pub(crate) fn dedupe_providers(config: &mut AppConfig) -> bool {
 
 pub(crate) fn normalize_provider_type(value: &str) -> String {
     match value.trim().to_lowercase().as_str() {
-        "openai" | "openai-compatible" => "openai-compatible".to_string(),
-        "local" | "openai-compatible" => "openai-compatible".to_string(),
+        "openai" | "openai-compatible" | "local" => "openai-compatible".to_string(),
         _ => "openai-compatible".to_string(),
     }
 }
@@ -156,10 +154,6 @@ pub(crate) fn with_optional_bearer_auth(
         Some(key) => builder.bearer_auth(key),
         None => builder,
     }
-}
-
-pub(crate) fn has_provider_api_key(provider: &ProviderConfig) -> bool {
-    provider_api_key_from_config(provider).is_some()
 }
 
 pub(crate) fn provider_to_view(provider: &ProviderConfig) -> ProviderView {

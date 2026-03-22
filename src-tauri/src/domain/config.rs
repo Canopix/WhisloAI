@@ -1,10 +1,7 @@
-use base64::Engine as _;
-use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tauri::path::BaseDirectory;
 use tauri::{Emitter, Manager};
 
 pub(crate) const KEYRING_SERVICE: &str = "whisloai";

@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
 
 mod app;
 mod commands;
@@ -10,6 +9,7 @@ mod platform;
 use domain::anchor::*;
 use domain::ai::*;
 use domain::config::*;
+#[cfg(test)]
 use domain::geometry::*;
 use domain::providers::*;
 use overlay::*;
@@ -17,39 +17,9 @@ use overlay::*;
 #[cfg(target_os = "macos")]
 mod macos_ax;
 
-const QUICK_WINDOW_WIDTH_COMPACT: f64 = 252.0;
-const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
-const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
-const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
-const TRAY_ICON_ID: &str = "whisloai-tray";
-const TRAY_MENU_VERSION: &str = "tray-version";
-const TRAY_MENU_OPEN_APP: &str = "tray-open-app";
-const TRAY_MENU_OPEN_SETTINGS: &str = "tray-open-settings";
-const TRAY_MENU_CHECK_UPDATES: &str = "tray-check-updates";
-const TRAY_MENU_QUIT: &str = "tray-quit";
-const INPUT_TARGET_TTL_MS: u128 = 90_000;
-const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
-const REFOCUS_POST_RESTORE_MS: u64 = 35;
-const ANCHOR_HIDE_DEBOUNCE_MS: u128 = 420;
-const ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS: u128 = 1_200;
-#[cfg(target_os = "macos")]
-const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 3;
-#[cfg(target_os = "macos")]
-const AX_NATIVE_FALLBACK_COOLDOWN_MS: u128 = 1_800;
-
-#[cfg(target_os = "macos")]
-static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock::new();
-
-
-
-
-#[cfg(target_os = "macos")]
-fn native_fallback_state() -> &'static Mutex<HybridFallbackState> {
-    AX_NATIVE_FALLBACK_STATE.get_or_init(|| Mutex::new(HybridFallbackState::default()))
-}
 #[cfg(target_os = "macos")]
 fn is_running_under_rosetta() -> bool {
-    *RUNNING_UNDER_ROSETTA.get_or_init(|| {
+    *overlay::refocus::RUNNING_UNDER_ROSETTA.get_or_init(|| {
         let Ok(output) = Command::new("sysctl")
             .args(["-in", "sysctl.proc_translated"])
             .output()
