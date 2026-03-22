@@ -268,6 +268,9 @@ function applyRuntimePermissionUi(status) {
   const platform = String(status?.platform || "").trim().toLowerCase();
   const needsAccessibility = Boolean(status?.needsAccessibility);
   const needsAutomation = Boolean(status?.needsAutomation);
+  const supportsContextualAnchor = Boolean(
+    status?.supportsContextualAnchor ?? platform === "macos",
+  );
   if (permissionsAccessibilityRowEl) {
     permissionsAccessibilityRowEl.hidden = !needsAccessibility;
   }
@@ -291,19 +294,19 @@ function applyRuntimePermissionUi(status) {
     );
   }
 
-  if (platform !== "macos") {
-    if (anchorBehaviorContextualOptionEl) {
-      anchorBehaviorContextualOptionEl.hidden = true;
-    }
-    const contextualSelectOption = anchorBehaviorEl?.querySelector('option[value="contextual"]');
-    if (contextualSelectOption) {
-      contextualSelectOption.hidden = true;
-    }
+  if (anchorBehaviorContextualOptionEl) {
+    anchorBehaviorContextualOptionEl.hidden = !supportsContextualAnchor;
+  }
+  const contextualSelectOption = anchorBehaviorEl?.querySelector('option[value="contextual"]');
+  if (contextualSelectOption) {
+    contextualSelectOption.hidden = !supportsContextualAnchor;
+  }
+  if (!supportsContextualAnchor) {
     if (currentAnchorBehavior !== "floating") {
       currentAnchorBehavior = "floating";
     }
-    syncAnchorBehaviorSelectionUi();
   }
+  syncAnchorBehaviorSelectionUi();
 }
 
 async function openPermissionSettingsFromSettings(permission, statusEl) {
