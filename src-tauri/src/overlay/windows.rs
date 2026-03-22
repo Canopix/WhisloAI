@@ -8,8 +8,9 @@ use crate::domain::geometry::{
     logical_to_physical, point_in_rect, sanitize_scale_factor, scale_for_logical_point_in_rects,
     to_u64_saturating,
 };
+use crate::overlay::anchor_monitor::start_anchor_monitor_once;
 use crate::overlay::refocus::*;
-use crate::{start_anchor_monitor_once, QUICK_WINDOW_HEIGHT_COMPACT, QUICK_WINDOW_WIDTH_COMPACT};
+use crate::{QUICK_WINDOW_HEIGHT_COMPACT, QUICK_WINDOW_WIDTH_COMPACT};
 
 pub(crate) fn show_main_window_for_onboarding(app: &tauri::AppHandle) {
     if let Some(main) = app.get_webview_window("main") {
