@@ -238,6 +238,10 @@ body {
   min-height: 44px;
   display: grid;
   gap: 6px;
+  transition:
+    border-color var(--duration-fast) var(--easing-standard),
+    background-color var(--duration-fast) var(--easing-standard),
+    box-shadow var(--duration-fast) var(--easing-standard);
 }
 
 .provider-card-btn:hover {
@@ -262,9 +266,43 @@ body {
   gap: 8px;
 }
 
+.provider-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.provider-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--accent);
+}
+
+.provider-card-icon .icon-lucide {
+  width: 16px;
+  height: 16px;
+}
+
 .provider-name {
   font-size: 13px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-meta {
+  font-size: 12px;
+  color: #5c7071;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .provider-chip {
@@ -307,10 +345,63 @@ body {
   align-content: start;
 }
 
+.provider-mode-banner {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  margin-bottom: 4px;
+  transition:
+    background-color var(--duration-medium) var(--easing-standard),
+    border-color var(--duration-medium) var(--easing-standard);
+}
+
+.provider-mode-banner[data-provider-mode="edit"] {
+  background: var(--surface-soft);
+  border-color: var(--border-soft);
+}
+
+.provider-mode-banner h2 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.provider-mode-banner[data-provider-mode="edit"] h2 {
+  color: var(--ink);
+}
+
+.provider-mode-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.provider-edit-only[hidden] {
+  display: none !important;
+}
+
 #provider-form,
 #provider-transcription-card {
   position: relative;
   overflow: hidden;
+}
+
+#provider-transcription-card {
+  border-radius: 14px;
+  padding: 16px 20px;
+  border-color: var(--border-soft);
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+#provider-transcription-card h2 {
+  font-size: 15px;
+}
+
+#provider-transcription-card .settings-subtitle {
+  font-size: 13px;
 }
 
 #provider-form::before,
@@ -571,6 +662,11 @@ body {
   margin: 0;
   font-size: 11px;
   color: #586d72;
+}
+
+.pipeline-guide-inline.is-ready .pipeline-inline-next {
+  color: var(--state-success-fg);
+  font-weight: 600;
 }
 
 .field.is-disabled label {

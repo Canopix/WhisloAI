@@ -228,9 +228,12 @@
               </aside>
 
               <div class="settings-main">
-              <form id="provider-form" class="settings-card">
-                <h2 id="provider-details-title" data-i18n="settings.provider.details.title">Provider Details</h2>
-                <p class="hint" data-i18n="settings.provider.details.hint">Configure connection and models for the selected provider. Test and save when ready.</p>
+              <form id="provider-form" class="settings-card" data-mode="create">
+                <div id="provider-mode-banner" class="provider-mode-banner" data-provider-mode="create">
+                  <h2 id="provider-mode-title" data-i18n="settings.provider.mode.creating">New provider</h2>
+                  <p id="provider-mode-hint" class="provider-mode-hint" data-i18n="settings.provider.mode.creating_hint">Fill in the details below and save.</p>
+                </div>
+                <p id="provider-details-hint" class="hint" data-i18n="settings.provider.details.hint">Configure connection and models for the selected provider. Test and save when ready.</p>
                 <input id="provider-id" type="hidden" />
                 <section id="pipeline-guide-providers" class="pipeline-guide pipeline-guide-inline" data-pipeline-guide="providers" aria-live="polite">
                   <div class="pipeline-inline-header">
@@ -305,19 +308,19 @@
                   <div class="field" id="provider-api-key-field">
                     <label for="provider-api-key" data-i18n="settings.field.api_key">API key</label>
                     <input id="provider-api-key" type="password" placeholder="sk-..." autocomplete="off" />
-                    <small class="field-hint" data-i18n="settings.field.api_key_hint">
+                    <small id="provider-api-key-hint" class="field-hint" data-i18n="settings.field.api_key_hint" hidden>
                       Stored locally. Leave unchanged to keep the current key.
                     </small>
                   </div>
                 </div>
 
                 <div class="settings-actions">
-                  <button type="button" id="delete-provider-btn" class="settings-btn-danger" data-i18n="settings.action.delete_provider">Delete provider</button>
-                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.set_active">Set active</button>
+                  <button type="button" id="delete-provider-btn" class="settings-btn-danger provider-edit-only" data-i18n="settings.action.delete_provider">Delete provider</button>
+                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary provider-edit-only" data-i18n="settings.action.set_active">Set active</button>
                   <button type="button" id="test-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.test_connection">
-                    Test connection (no save)
+                    Test connection
                   </button>
-                  <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
+                  <button type="submit" id="save-provider-btn" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
                 </div>
               </form>
               <section id="provider-transcription-card" class="settings-card">

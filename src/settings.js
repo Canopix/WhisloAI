@@ -59,7 +59,10 @@ const anchorBehaviorContextualOptionEl = document.querySelector(
 const providersList = document.getElementById("providers-list");
 const providerForm = document.getElementById("provider-form");
 const providerId = document.getElementById("provider-id");
-const providerDetailsTitle = document.getElementById("provider-details-title");
+const providerModeBanner = document.getElementById("provider-mode-banner");
+const providerModeTitle = document.getElementById("provider-mode-title");
+const providerModeHint = document.getElementById("provider-mode-hint");
+const providerDetailsHint = document.getElementById("provider-details-hint");
 const providerName = document.getElementById("provider-name");
 const providerType = document.getElementById("provider-type");
 const providerBaseUrl = document.getElementById("provider-base-url");
@@ -69,7 +72,9 @@ const providerTranscribeModelHint = document.getElementById("provider-transcribe
 const providerTranslateModelField = document.getElementById("provider-translate-model-field");
 const providerTranscribeModelField = document.getElementById("provider-transcribe-model-field");
 const providerApiKey = document.getElementById("provider-api-key");
+const providerApiKeyHint = document.getElementById("provider-api-key-hint");
 const providerApiKeyField = document.getElementById("provider-api-key-field");
+const saveProviderBtn = document.getElementById("save-provider-btn");
 const testProviderBtn = document.getElementById("test-provider-btn");
 const newProviderBtn = document.getElementById("new-provider-btn");
 const activateProviderBtn = document.getElementById("activate-provider-btn");
@@ -545,15 +550,42 @@ function isOpenAiType(value) {
   return String(value || "").trim().toLowerCase() === "openai";
 }
 
-function setProviderDetailsTitle(isCreatingNew) {
-  if (!providerDetailsTitle) {
-    return;
+function setProviderMode(isCreatingNew, providerNameValue) {
+  if (providerForm) {
+    providerForm.dataset.mode = isCreatingNew ? "create" : "edit";
   }
-  const nextKey = isCreatingNew
-    ? "settings.provider.details.title_new"
-    : "settings.provider.details.title";
-  providerDetailsTitle.dataset.i18n = nextKey;
-  providerDetailsTitle.textContent = t(nextKey);
+
+  const editOnlyButtons = providerForm ? providerForm.querySelectorAll(".provider-edit-only") : [];
+  editOnlyButtons.forEach((btn) => {
+    btn.hidden = isCreatingNew;
+  });
+
+  if (providerModeBanner) {
+    providerModeBanner.dataset.providerMode = isCreatingNew ? "create" : "edit";
+  }
+  if (providerModeTitle) {
+    const key = isCreatingNew
+      ? "settings.provider.mode.creating"
+      : "settings.provider.mode.editing";
+    providerModeTitle.dataset.i18n = key;
+    providerModeTitle.textContent = isCreatingNew ? t(key) : t(key, { name: providerNameValue || "" });
+  }
+  if (providerModeHint) {
+    providerModeHint.hidden = !isCreatingNew;
+  }
+  if (providerDetailsHint) {
+    providerDetailsHint.hidden = isCreatingNew;
+  }
+  if (providerApiKeyHint) {
+    providerApiKeyHint.hidden = isCreatingNew;
+  }
+  if (saveProviderBtn) {
+    const btnKey = isCreatingNew
+      ? "settings.action.save_provider"
+      : "settings.action.update_provider";
+    saveProviderBtn.dataset.i18n = btnKey;
+    saveProviderBtn.textContent = t(btnKey);
+  }
 }
 
 function normalizedTranscriptionMode() {
@@ -789,8 +821,16 @@ function renderPipelineGuideBlock(guide, state) {
       ? t("settings.pipeline.status.missing", { count: state.blockers.length })
       : t("settings.pipeline.status.ready");
   }
+  guide.classList.toggle("is-ready", !hasBlockers);
+  guide.classList.toggle("has-blockers", hasBlockers);
+
   if (nextAction) {
     nextAction.textContent = t(state.nextActionKey);
+  }
+
+  const scenariosEl = guide.querySelector(".pipeline-scenarios");
+  if (scenariosEl) {
+    scenariosEl.hidden = !hasBlockers;
   }
 
   guide.querySelectorAll(".pipeline-scenario").forEach((card) => {
@@ -906,7 +946,7 @@ function syncProviderButtons() {
 
 function fillProviderForm(provider) {
   selectedProviderId = provider.id;
-  setProviderDetailsTitle(false);
+  setProviderMode(false, provider.name);
   providerId.value = provider.id;
   providerName.value = provider.name;
   providerType.value = provider.providerType;
@@ -923,7 +963,7 @@ function fillProviderForm(provider) {
 
 function resetProviderForm() {
   selectedProviderId = null;
-  setProviderDetailsTitle(true);
+  setProviderMode(true);
   providerId.value = "";
   providerName.value = "";
   providerType.value = "openai";
@@ -944,10 +984,9 @@ function renderProvidersSummary() {
     providersSummaryEl.textContent = t("settings.providers.none");
     return;
   }
-  providersSummaryEl.textContent = t("settings.providers.summary", {
-    total,
-    active: active ? active.name : t("settings.providers.active_none"),
-  });
+  const activeName = active ? active.name : t("settings.providers.active_none");
+  const key = total === 1 ? "settings.providers.summary_one" : "settings.providers.summary_many";
+  providersSummaryEl.textContent = t(key, { total, active: activeName });
 }
 
 function renderProvidersList(preferredId) {
@@ -981,13 +1020,19 @@ function renderProvidersList(preferredId) {
       : provider.hasApiKey
         ? t("settings.card.key_saved")
         : t("settings.card.key_missing");
+    const iconClass = compatibleProvider ? "provider-card-icon-Local" : "provider-card-icon-cloud";
     button.type = "button";
     button.className = `provider-card-btn ${provider.isActive ? "is-active" : ""} ${
       provider.id === selectedProviderId ? "is-selected" : ""
     }`;
     button.innerHTML = `
       <span class="provider-card-top">
-        <span class="provider-name">${escapeHtml(provider.name)}</span>
+        <span class="provider-card-name-row">
+          <span class="provider-card-icon ${iconClass}" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="${compatibleProvider ? "server" : "cloud"}"></i>
+          </span>
+          <span class="provider-name">${escapeHtml(provider.name)}</span>
+        </span>
         <span class="provider-chip ${provider.isActive ? "is-active" : ""}">${provider.isActive ? t("settings.card.active") : t("settings.card.inactive")}</span>
       </span>
       <span class="provider-meta">${escapeHtml(provider.providerType)} · ${escapeHtml(providerHost(provider.baseUrl))}</span>
@@ -1006,6 +1051,10 @@ function renderProvidersList(preferredId) {
 
   if (selected) {
     fillProviderForm(selected);
+  }
+
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
   }
 }
 
