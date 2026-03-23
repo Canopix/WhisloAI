@@ -155,6 +155,17 @@ function syncAnchorBehaviorSelectionUi() {
   }
 }
 
+function setAnchorPreviewState(imageEl, state) {
+  const slot = imageEl?.closest(".anchor-behavior-gif-slot");
+  const option = imageEl?.closest(".anchor-behavior-option");
+  if (slot) {
+    slot.dataset.previewState = state;
+  }
+  if (option) {
+    option.dataset.previewState = state;
+  }
+}
+
 function setAnchorBehaviorGifPreview(imageEl, candidatePaths) {
   if (!imageEl) {
     return;
@@ -163,12 +174,14 @@ function setAnchorBehaviorGifPreview(imageEl, candidatePaths) {
   const emptyStateEl = slot ? slot.querySelector(".anchor-behavior-gif-empty") : null;
   const candidates = (candidatePaths || []).map((value) => String(value || "").trim()).filter(Boolean);
   let index = 0;
+  setAnchorPreviewState(imageEl, candidates.length ? "loading" : "fallback");
 
   const showFallback = () => {
     imageEl.hidden = true;
     if (emptyStateEl) {
       emptyStateEl.hidden = false;
     }
+    setAnchorPreviewState(imageEl, "fallback");
   };
 
   const tryNext = () => {
@@ -185,6 +198,7 @@ function setAnchorBehaviorGifPreview(imageEl, candidatePaths) {
       if (emptyStateEl) {
         emptyStateEl.hidden = true;
       }
+      setAnchorPreviewState(imageEl, "ready");
     };
     imageEl.onerror = () => {
       imageEl.onload = null;
@@ -206,6 +220,43 @@ function initializeAnchorBehaviorGifPreviews() {
   setAnchorBehaviorGifPreview(anchorGifFloatingEl, [
     "./free.gif",
   ]);
+}
+
+function primaryPermissionSettingsButton() {
+  const candidates = [
+    permissionsOpenMicrophoneBtn,
+    permissionsOpenAccessibilityBtn,
+    permissionsOpenAutomationBtn,
+  ].filter((button) => {
+    if (!button) {
+      return false;
+    }
+    const row = button.closest(".permissions-row");
+    return !row || !row.hidden;
+  });
+
+  const pending = candidates.find((button) => {
+    const row = button.closest(".permissions-row");
+    return row?.dataset.state !== "ready";
+  });
+
+  return pending || candidates[0] || null;
+}
+
+function wirePermissionsPrimaryCta() {
+  const primaryCta = document.getElementById("permissions-primary-cta");
+  if (!primaryCta || primaryCta.dataset.boundPrimaryPermissionsCta === "true") {
+    return;
+  }
+  primaryCta.dataset.boundPrimaryPermissionsCta = "true";
+  primaryCta.addEventListener("click", () => {
+    const target = primaryPermissionSettingsButton();
+    if (!target) {
+      setStatusKey("settings.status.app_not_ready", "error");
+      return;
+    }
+    target.click();
+  });
 }
 
 function normalizeError(error) {
@@ -443,14 +494,27 @@ function hasView(view) {
   return document.querySelector(`.settings-view[data-view="${view}"]`) != null;
 }
 
+function defaultSettingsView() {
+  if (hasView("general")) {
+    return "general";
+  }
+  if (hasView("providers")) {
+    return "providers";
+  }
+  return "general";
+}
+
 function currentHashView() {
   const view = window.location.hash.replace(/^#/, "").trim();
-  return hasView(view) ? view : "providers";
+  if (hasView(view)) {
+    return view;
+  }
+  return defaultSettingsView();
 }
 
 function activateView(view, syncHash = true) {
   const views = Array.from(document.querySelectorAll(".settings-view"));
-  const nextView = views.some((s) => s.dataset.view === view) ? view : "providers";
+  const nextView = views.some((s) => s.dataset.view === view) ? view : defaultSettingsView();
   document.querySelectorAll(".settings-nav-btn").forEach((btn) => {
     const isActive = btn.dataset.view === nextView;
     btn.classList.toggle("is-active", isActive);
@@ -1402,8 +1466,13 @@ for (const optionToggle of anchorBehaviorToggleEls) {
   optionToggle.addEventListener("keydown", (event) => {
     const keysPrev = ["ArrowLeft", "ArrowUp"];
     const keysNext = ["ArrowRight", "ArrowDown"];
-    const currentIndex = anchorBehaviorToggleEls.indexOf(optionToggle);
-    if (currentIndex === -1) {
+    const visibleToggles = anchorBehaviorToggleEls.filter((t) => {
+      const option = t.closest(".anchor-behavior-option");
+      return !option || option.hidden === false;
+    });
+
+    const currentIndexVisible = visibleToggles.indexOf(optionToggle);
+    if (currentIndexVisible === -1) {
       return;
     }
 
@@ -1419,8 +1488,8 @@ for (const optionToggle of anchorBehaviorToggleEls) {
 
     event.preventDefault();
     const delta = keysPrev.includes(event.key) ? -1 : 1;
-    const rawNext = (currentIndex + delta + anchorBehaviorToggleEls.length) % anchorBehaviorToggleEls.length;
-    const nextToggle = anchorBehaviorToggleEls[rawNext];
+    const nextIndex = (currentIndexVisible + delta + visibleToggles.length) % visibleToggles.length;
+    const nextToggle = visibleToggles[nextIndex];
     if (!nextToggle) {
       return;
     }
@@ -1775,6 +1844,7 @@ async function bootstrap() {
   resetProviderForm();
   fillPromptForm(DEFAULT_PROMPT_SETTINGS);
   initializeAnchorBehaviorGifPreviews();
+  wirePermissionsPrimaryCta();
   setPermissionInlineStatus(
     permissionsMicrophoneStatusEl,
     "settings.permissions.status.not_checked",

@@ -9,8 +9,9 @@
   <body class="settings-body">
     <main class="settings-shell">
       <header class="settings-hero">
-        <h1 data-i18n="settings.hero.title">Settings</h1>
-        <p data-i18n="settings.hero.subtitle">Configure your provider once, test it instantly.</p>
+        <p class="settings-hero-eyebrow" data-i18n="settings.hero.eyebrow">Setup</p>
+        <h1 data-i18n="settings.hero.title">Get started</h1>
+        <p data-i18n="settings.hero.subtitle">Set your language, anchor position, and system permissions.</p>
         <p id="settings-installed-version" class="hint settings-installed-version">Installed version: —</p>
       </header>
 
@@ -18,15 +19,15 @@
 
       <div class="settings-layout">
         <aside class="settings-nav" role="tablist" data-i18n-aria-label="settings.nav.aria">
-          <button type="button" id="nav-general" class="settings-nav-btn" data-view="general" role="tab" aria-selected="false" aria-controls="view-general" data-i18n="settings.nav.general">General & Permissions</button>
-          <button type="button" id="nav-providers" class="settings-nav-btn is-active" data-view="providers" role="tab" aria-selected="true" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
+          <button type="button" id="nav-general" class="settings-nav-btn is-active" data-view="general" role="tab" aria-selected="true" aria-controls="view-general" data-i18n="settings.nav.general">General & Permissions</button>
+          <button type="button" id="nav-providers" class="settings-nav-btn" data-view="providers" role="tab" aria-selected="false" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
           <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
         </aside>
 
         <section class="settings-content">
-          <section id="view-general" class="settings-view" data-view="general" role="tabpanel" aria-labelledby="nav-general">
-            <div class="settings-card">
-              <h2 data-i18n="settings.general.title">General</h2>
+          <section id="view-general" class="settings-view is-active" data-view="general" role="tabpanel" aria-labelledby="nav-general">
+            <div id="general-card" class="settings-card" data-settings-section="general" aria-labelledby="general-heading">
+              <h2 id="general-heading" data-i18n="settings.general.title">General</h2>
               <p class="hint" data-i18n="settings.general.hint">Choose the interface language for widget, settings, and main app.</p>
               <div class="settings-form-grid">
                 <div class="field field-full">
@@ -66,9 +67,9 @@
                         </span>
                       </button>
                       <div class="anchor-behavior-gif-slot">
-                        <img id="anchor-gif-contextual" class="anchor-behavior-gif" alt="Contextual behavior preview" hidden />
-                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.gif_placeholder">
-                          GIF preview space
+                        <img id="anchor-gif-contextual" class="anchor-behavior-gif" alt="" hidden />
+                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.contextual_preview_fallback">
+                          Anchor appears near active input field
                         </span>
                       </div>
                     </article>
@@ -90,9 +91,9 @@
                         </span>
                       </button>
                       <div class="anchor-behavior-gif-slot">
-                        <img id="anchor-gif-floating" class="anchor-behavior-gif" alt="Floating behavior preview" hidden />
-                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.gif_placeholder">
-                          GIF preview space
+                        <img id="anchor-gif-floating" class="anchor-behavior-gif" alt="" hidden />
+                        <span class="anchor-behavior-gif-empty" data-i18n="settings.general.anchor_behavior.floating_preview_fallback">
+                          Anchor stays on screen, drag to reposition
                         </span>
                       </div>
                     </article>
@@ -101,13 +102,10 @@
               </div>
             </div>
 
-            <div id="permissions-card" class="settings-card">
-              <h2 data-i18n="settings.permissions.title">Permissions</h2>
-              <p class="hint" data-i18n="settings.permissions.hint">
-                Manage permission checks for microphone, accessibility, and automation (System Events).
-              </p>
-              <p class="hint permissions-restart-hint" data-i18n="settings.permissions.restart_hint">
-                After granting permissions, close WhisloAI completely and reopen it.
+            <div id="permissions-card" class="settings-card" data-settings-section="permissions" aria-labelledby="permissions-heading">
+              <h2 id="permissions-heading" data-i18n="settings.permissions.title">Permissions</h2>
+              <p class="hint" data-i18n="settings.permissions.explainer">
+                WhisloAI needs microphone for dictation, accessibility to insert text, and automation to manage app focus. Grant each permission below.
               </p>
 
               <div class="permissions-grid">
@@ -201,9 +199,20 @@
                   </p>
                 </section>
               </div>
+
+              <div class="permissions-actions permissions-primary-cta">
+                 <button
+                   type="button"
+                   id="permissions-primary-cta"
+                   class="settings-btn-secondary"
+                   data-i18n="settings.permissions.cta"
+                 >
+                   Open next required system settings page
+                 </button>
+              </div>
             </div>
 
-            <div class="settings-card creator-card">
+            <footer id="settings-creator-footer" class="settings-footer">
               <h2 data-i18n="settings.creator.title">Creator</h2>
               <p class="hint" data-i18n="settings.creator.thanks">Thanks for using WhisloAI.</p>
               <p class="hint">
@@ -213,10 +222,10 @@
               <p class="hint" data-i18n="settings.creator.support">
                 If you enjoy the app or have questions, follow me on X and open an issue in the project repository.
               </p>
-            </div>
+            </footer>
           </section>
 
-          <section id="view-providers" class="settings-view is-active" data-view="providers" role="tabpanel" aria-labelledby="nav-providers">
+          <section id="view-providers" class="settings-view" data-view="providers" role="tabpanel" aria-labelledby="nav-providers">
             <div class="settings-grid">
               <aside class="settings-panel providers-panel">
                 <div class="providers-header">

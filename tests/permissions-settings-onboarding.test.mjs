@@ -136,3 +136,177 @@ test("onboarding success messages explain app relaunch", () => {
     "Expected Spanish copy to mention closing/reopening the app",
   );
 });
+
+test("settings hero reframes General + Permissions as guided setup", () => {
+  const html = read("src/settings.html");
+  const i18n = read("src/i18n.js");
+
+  expectContainsAll(
+    html,
+    [
+      'class="settings-hero"',
+      'data-i18n="settings.hero.eyebrow"',
+      'data-i18n="settings.hero.title"',
+      'data-i18n="settings.hero.subtitle"',
+    ],
+    "src/settings.html",
+  );
+
+  const heroEyebrowValues = extractI18nValue(i18n, "settings.hero.eyebrow");
+  const heroTitleValues = extractI18nValue(i18n, "settings.hero.title");
+  const heroSubtitleValues = extractI18nValue(i18n, "settings.hero.subtitle");
+
+  assert.equal(heroEyebrowValues.length, 2, "Expected EN + ES for settings hero eyebrow");
+  assert.equal(heroTitleValues.length, 2, "Expected EN + ES for settings hero title");
+  assert.equal(heroSubtitleValues.length, 2, "Expected EN + ES for settings hero subtitle");
+
+  const heroValues = [...heroEyebrowValues, ...heroTitleValues, ...heroSubtitleValues].map((value) =>
+    value.toLowerCase(),
+  );
+
+  assert.ok(
+    heroValues.some((value) => value.includes("setup")),
+    "Expected English hero copy to frame Settings as setup",
+  );
+  assert.ok(
+    heroValues.some((value) => value.includes("configur")),
+    "Expected Spanish hero copy to frame Settings as configuration/setup",
+  );
+  assert.ok(
+    heroValues.some((value) => value.includes("permission") || value.includes("permis")),
+    "Expected hero copy to call out permissions explicitly",
+  );
+});
+
+test("settings General and Permissions sections expose stronger hierarchy hooks", () => {
+  const html = read("src/settings.html");
+
+  expectContainsAll(
+    html,
+    [
+      'id="general-card"',
+      'data-settings-section="general"',
+      'id="general-heading"',
+      'aria-labelledby="general-heading"',
+      'data-settings-section="permissions"',
+      'id="permissions-heading"',
+      'aria-labelledby="permissions-heading"',
+    ],
+    "src/settings.html",
+  );
+});
+
+test("permissions redesign adds richer explainer and CTA hooks", () => {
+  const html = read("src/settings.html");
+  const i18n = read("src/i18n.js");
+
+  expectContainsAll(
+    html,
+    [
+      'data-i18n="settings.permissions.explainer"',
+      'data-i18n="settings.permissions.cta"',
+      'id="permissions-primary-cta"',
+    ],
+    "src/settings.html",
+  );
+
+  const explainerValues = extractI18nValue(i18n, "settings.permissions.explainer");
+  const ctaValues = extractI18nValue(i18n, "settings.permissions.cta");
+
+  assert.equal(explainerValues.length, 2, "Expected EN + ES for permissions explainer");
+  assert.equal(ctaValues.length, 2, "Expected EN + ES for permissions CTA");
+
+  const explainerLower = explainerValues.map((value) => value.toLowerCase());
+  const ctaLower = ctaValues.map((value) => value.toLowerCase());
+
+  assert.ok(
+    explainerLower.some(
+      (value) => value.includes("microphone") && value.includes("accessibility") && value.includes("automation"),
+    ),
+    "Expected English explainer to describe microphone, accessibility, and automation together",
+  );
+  assert.ok(
+    explainerLower.some((value) => value.includes("micr") && value.includes("acces") && value.includes("automat")),
+    "Expected Spanish explainer to describe microphone, accessibility, and automation together",
+  );
+  assert.ok(
+    ctaLower.some((value) => value.includes("system settings")),
+    "Expected English CTA to direct users into system settings",
+  );
+  assert.ok(
+    ctaLower.some((value) => value.includes("configuración") || value.includes("ajustes")),
+    "Expected Spanish CTA to direct users into system settings",
+  );
+});
+
+test("anchor behavior preview uses meaningful fallback copy hooks", () => {
+  const html = read("src/settings.html");
+  const i18n = read("src/i18n.js");
+
+  expectContainsAll(
+    html,
+    [
+      'data-i18n="settings.general.anchor_behavior.contextual_preview_fallback"',
+      'data-i18n="settings.general.anchor_behavior.floating_preview_fallback"',
+    ],
+    "src/settings.html",
+  );
+
+  const contextualValues = extractI18nValue(i18n, "settings.general.anchor_behavior.contextual_preview_fallback");
+  const floatingValues = extractI18nValue(i18n, "settings.general.anchor_behavior.floating_preview_fallback");
+
+  assert.equal(contextualValues.length, 2, "Expected EN + ES for contextual preview fallback");
+  assert.equal(floatingValues.length, 2, "Expected EN + ES for floating preview fallback");
+
+  const contextualLower = contextualValues.map((value) => value.toLowerCase());
+  const floatingLower = floatingValues.map((value) => value.toLowerCase());
+
+  assert.ok(
+    contextualLower.some((value) => value.includes("input") || value.includes("cursor")),
+    "Expected contextual fallback copy to describe the anchor near active input/cursor",
+  );
+  assert.ok(
+    contextualLower.some((value) => value.includes("campo") || value.includes("cursor") || value.includes("entrada")),
+    "Expected Spanish contextual fallback copy to describe the active input/cursor",
+  );
+  assert.ok(
+    floatingLower.some((value) => value.includes("drag") || value.includes("screen")),
+    "Expected floating fallback copy to describe the movable on-screen anchor",
+  );
+  assert.ok(
+    floatingLower.some((value) => value.includes("arrastr") || value.includes("pantalla") || value.includes("mover")),
+    "Expected Spanish floating fallback copy to describe the movable on-screen anchor",
+  );
+});
+
+test("anchor behavior preview images cannot be natively dragged", () => {
+  const css = read("src/styles.css");
+  const gifRuleIndex = css.indexOf(".anchor-behavior-gif {");
+  assert.ok(
+    gifRuleIndex !== -1,
+    "Expected .anchor-behavior-gif rule to exist in styles.css",
+  );
+  const nextBrace = css.indexOf("}", gifRuleIndex);
+  const ruleBlock = css.slice(gifRuleIndex, nextBrace);
+  assert.ok(
+    ruleBlock.includes("pointer-events: none"),
+    `Expected .anchor-behavior-gif rule block to contain pointer-events: none, got: ${ruleBlock}`,
+  );
+});
+
+test("creator treatment moves into a dedicated settings footer surface", () => {
+  const html = read("src/settings.html");
+
+  expectContainsAll(
+    html,
+    [
+      '<footer',
+      'id="settings-creator-footer"',
+      'data-i18n="settings.creator.title"',
+      'data-i18n="settings.creator.follow"',
+      'data-i18n="settings.creator.support"',
+      'id="creator-profile-link"',
+    ],
+    "src/settings.html",
+  );
+});
