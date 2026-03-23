@@ -137,13 +137,15 @@ pub(crate) fn dedupe_providers(config: &mut AppConfig) -> bool {
 
 pub(crate) fn normalize_provider_type(value: &str) -> String {
     match value.trim().to_lowercase().as_str() {
-        "openai" | "openai-compatible" | "local" => "openai-compatible".to_string(),
+        "openai" => "openai".to_string(),
+        "openai-compatible" | "local" => "openai-compatible".to_string(),
         _ => "openai-compatible".to_string(),
     }
 }
 
 pub(crate) fn provider_requires_api_key(provider_type: &str) -> bool {
-    normalize_provider_type(provider_type) == "openai-compatible"
+    let normalized = normalize_provider_type(provider_type);
+    matches!(normalized.as_str(), "openai" | "openai-compatible")
 }
 
 pub(crate) fn with_optional_bearer_auth(

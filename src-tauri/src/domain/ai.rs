@@ -267,19 +267,20 @@ pub(crate) async fn run_local_rest_chat(
 pub(crate) async fn test_local_provider_connection(
     base_url: &str,
     api_key: Option<&str>,
+    model: Option<&str>,
 ) -> Result<String, String> {
     let system_prompt = "You are a connection test assistant.";
     let ping_message = "ping";
 
     if local_prefers_openai_chat_endpoint(base_url) {
         let openai_probe =
-            run_openai_chat_completion(base_url, api_key, None, system_prompt, ping_message).await;
+            run_openai_chat_completion(base_url, api_key, model, system_prompt, ping_message).await;
         if openai_probe.is_ok() {
             return Ok("Connected successfully via /chat/completions.".to_string());
         }
 
         let local_probe =
-            run_local_rest_chat(base_url, api_key, None, system_prompt, ping_message).await;
+            run_local_rest_chat(base_url, api_key, model, system_prompt, ping_message).await;
         return match local_probe {
             Ok(_) => Ok("Connected successfully via /chat (fallback).".to_string()),
             Err(local_error) => Err(format!(
@@ -292,13 +293,13 @@ pub(crate) async fn test_local_provider_connection(
     }
 
     let local_probe =
-        run_local_rest_chat(base_url, api_key, None, system_prompt, ping_message).await;
+        run_local_rest_chat(base_url, api_key, model, system_prompt, ping_message).await;
     if local_probe.is_ok() {
         return Ok("Connected successfully via /chat.".to_string());
     }
 
     let openai_probe =
-        run_openai_chat_completion(base_url, api_key, None, system_prompt, ping_message).await;
+        run_openai_chat_completion(base_url, api_key, model, system_prompt, ping_message).await;
     match openai_probe {
         Ok(_) => Ok("Connected successfully via /chat/completions (fallback).".to_string()),
         Err(openai_error) => Err(format!(

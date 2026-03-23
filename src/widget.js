@@ -334,6 +334,13 @@ async function runSelectionAction() {
     await insertResultText(output, { preferReplaceSelection: true });
   } catch (error) {
     try {
+      await invoke("log_dictation_trace", {
+        event: "widget_translate_error",
+        payload: { message: String(error?.message || error || "unknown") },
+        level: "warn",
+      });
+    } catch (_) {}
+    try {
       await invoke("open_quick_window");
     } catch (_) {
       // ignore
@@ -365,6 +372,13 @@ async function runImproveAction() {
 
     await insertResultText(output, { preferReplaceSelection: true });
   } catch (error) {
+    try {
+      await invoke("log_dictation_trace", {
+        event: "widget_improve_error",
+        payload: { message: String(error?.message || error || "unknown") },
+        level: "warn",
+      });
+    } catch (_) {}
     try {
       await invoke("open_quick_window");
     } catch (_) {

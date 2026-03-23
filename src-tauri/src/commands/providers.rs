@@ -213,7 +213,8 @@ pub(crate) async fn test_provider_connection(
 
     let api_key = provider_api_key(&provider)?;
     if provider_type == "openai-compatible" {
-        return test_local_provider_connection(&base_url, api_key.as_deref()).await;
+        let model = non_empty_trimmed(&provider.translate_model);
+        return test_local_provider_connection(&base_url, api_key.as_deref(), model).await;
     }
     let endpoint = provider_endpoint(&base_url, "models");
 
@@ -264,7 +265,8 @@ pub(crate) async fn test_provider_connection_input(
     let config = load_config(&app)?;
     let resolved_api_key = provider_api_key_for_input(&config, &provider, api_key)?;
     if provider_type == "openai-compatible" {
-        return test_local_provider_connection(&base_url, resolved_api_key.as_deref()).await;
+        let model = non_empty_trimmed(&provider.translate_model);
+        return test_local_provider_connection(&base_url, resolved_api_key.as_deref(), model).await;
     }
 
     let endpoint = provider_endpoint(&base_url, "models");
