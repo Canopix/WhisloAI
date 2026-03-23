@@ -1256,6 +1256,360 @@ body {
   color: var(--state-error-fg);
 }
 
+/* Full-window onboarding */
+.onboarding-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background:
+    radial-gradient(circle at 10% 10%, #e8f7f4, transparent 30%),
+    radial-gradient(circle at 90% 90%, rgba(15, 118, 110, 0.06), transparent 35%),
+    var(--bg);
+  overflow-y: auto;
+}
+
+.onboarding-fullscreen[hidden] {
+  display: none;
+}
+
+/* Hide topbar when fullscreen onboarding is active */
+body:has(.onboarding-fullscreen:not([hidden])) .topbar {
+  display: none;
+}
+
+body:has(.onboarding-fullscreen:not([hidden])) .app.compact-app {
+  padding: 0;
+}
+
+/* Welcome hero step */
+.onboarding-hero {
+  text-align: center;
+  max-width: 360px;
+}
+
+.onboarding-hero-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  background: linear-gradient(145deg, #e9f8f5 0%, #f7fcfb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.12);
+}
+
+.onboarding-hero-icon img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.onboarding-hero-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.2px;
+}
+
+.onboarding-hero-subtitle {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.onboarding-hero-action button {
+  min-width: 160px;
+}
+
+/* Permission step card */
+.onboarding-permission-step {
+  max-width: 400px;
+  width: 100%;
+}
+
+.onboarding-step-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.08);
+  animation: onboarding-step-enter var(--duration-medium) var(--easing-standard);
+}
+
+.onboarding-step-content h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.onboarding-step-hint {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+/* Step icon */
+.onboarding-step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.onboarding-step-icon .icon-lucide {
+  width: 24px;
+  height: 24px;
+}
+
+/* Animated checkmark */
+.onboarding-step-checkmark {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity var(--duration-medium) var(--easing-standard),
+              transform var(--duration-medium) var(--easing-standard);
+  color: var(--accent);
+}
+
+.onboarding-step-checkmark .checkmark-circle {
+  stroke-dasharray: 63;
+  stroke-dashoffset: 63;
+  transform-origin: center;
+}
+
+.onboarding-step-checkmark .checkmark-check {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  transform-origin: center;
+}
+
+.onboarding-step.is-complete .onboarding-step-checkmark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.onboarding-step.is-complete .onboarding-step-checkmark .checkmark-circle {
+  animation: checkmark-circle-draw 0.4s var(--easing-standard) forwards;
+}
+
+.onboarding-step.is-complete .onboarding-step-checkmark .checkmark-check {
+  animation: checkmark-check-draw 0.3s var(--easing-standard) 0.3s forwards;
+}
+
+@keyframes checkmark-circle-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes checkmark-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes onboarding-step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Step actions */
+.onboarding-step-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.onboarding-step-actions button {
+  min-width: 180px;
+}
+
+/* Settings link (text link, not button) */
+.onboarding-settings-link {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--easing-standard);
+  min-height: auto;
+}
+
+.onboarding-settings-link:hover {
+  color: var(--accent-strong);
+}
+
+/* Footer with progress and navigation */
+.onboarding-footer {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 400px;
+  padding: 0 24px;
+}
+
+/* Progress dots */
+.onboarding-progress {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.onboarding-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--easing-standard),
+              border-color var(--duration-fast) var(--easing-standard),
+              transform var(--duration-fast) var(--easing-standard);
+  min-height: 8px;
+}
+
+.onboarding-progress-dot:hover {
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+
+.onboarding-progress-dot:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.onboarding-progress-dot[aria-selected="true"],
+.onboarding-progress-dot.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.onboarding-progress-dot.is-complete {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Navigation bar */
+.onboarding-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.onboarding-nav-back,
+.onboarding-nav-next,
+.onboarding-nav-finish {
+  min-width: 100px;
+}
+
+.onboarding-nav-finish:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.onboarding-nav-skip {
+  display: inline-block;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--easing-standard);
+  min-height: auto;
+}
+
+.onboarding-nav-skip:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Finish hint when disabled */
+.onboarding-finish-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* Step state pill updates for stepper */
+.onboarding-permission-step .onboarding-step-state {
+  margin-bottom: 16px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-step-content {
+    animation: none;
+  }
+
+  .onboarding-step-checkmark,
+  .onboarding-step-checkmark .checkmark-circle,
+  .onboarding-step-checkmark .checkmark-check {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .onboarding-step.is-complete .onboarding-step-checkmark {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .onboarding-step.is-complete .onboarding-step-checkmark .checkmark-circle,
+  .onboarding-step.is-complete .onboarding-step-checkmark .checkmark-check {
+    stroke-dashoffset: 0;
+  }
+
+  .onboarding-progress-dot {
+    transition: none;
+  }
+}
+
 .anchor-body {
   margin: 0;
   padding: 0;

@@ -30,6 +30,12 @@ const recordingVisualizerEl = document.getElementById("recording-visualizer");
 const recordingWaveformEl = document.getElementById("recording-waveform");
 
 const onboardingPanel = document.getElementById("onboarding-panel");
+const onboardingWelcomeStep = document.getElementById("onboarding-welcome-step");
+const onboardingGetStartedBtn = document.getElementById("onboarding-get-started-btn");
+const onboardingBackBtn = document.getElementById("onboarding-back-btn");
+const onboardingNextBtn = document.getElementById("onboarding-next-btn");
+const onboardingProgressDots = document.querySelectorAll(".onboarding-progress-dot");
+const onboardingFinishHint = document.getElementById("onboarding-finish-hint");
 const onboardingMicBtn = document.getElementById("onboarding-mic-btn");
 const onboardingMicSettingsBtn = document.getElementById("onboarding-mic-settings-btn");
 const onboardingMicStatus = document.getElementById("onboarding-mic-status");
@@ -70,6 +76,10 @@ let currentRecordingState = {
   params: null,
   tone: "neutral",
 };
+let onboardingCurrentStep = 0;
+let onboardingVisibleSteps = [];
+let onboardingNeedsAccessibility = false;
+let onboardingNeedsAutomation = false;
 
 const RECORDING_WAVE_BARS = 24;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
@@ -326,6 +336,146 @@ function setOnboardingVisible(visible) {
   }
 }
 
+function buildOnboardingVisibleSteps() {
+  const steps = ["mic"];
+  if (onboardingNeedsAccessibility) {
+    steps.push("accessibility");
+  }
+  if (onboardingNeedsAutomation) {
+    steps.push("automation");
+  }
+  return steps;
+}
+
+function showOnboardingStep(stepIndex) {
+  const allSteps = [
+    onboardingWelcomeStep,
+    onboardingMicStep,
+    onboardingAccessibilityStep,
+    onboardingAutomationStep,
+  ];
+
+  allSteps.forEach((step, index) => {
+    if (!step) return;
+    const isWelcome = index === 0;
+    const isPermissionStep = !isWelcome;
+
+    if (isPermissionStep) {
+      const stepName = index === 1 ? "mic" : index === 2 ? "accessibility" : "automation";
+      const shouldShow = stepName === "mic" || 
+        (stepName === "accessibility" && onboardingNeedsAccessibility) ||
+        (stepName === "automation" && onboardingNeedsAutomation);
+      
+      if (!shouldShow) {
+        step.hidden = true;
+        step.classList.remove("is-active");
+        return;
+      }
+    }
+
+    if (index === stepIndex) {
+      step.hidden = false;
+      step.classList.add("is-active");
+    } else {
+      step.hidden = true;
+      step.classList.remove("is-active");
+    }
+  });
+
+  onboardingCurrentStep = stepIndex;
+  updateOnboardingNav();
+  updateOnboardingProgressDots();
+}
+
+function updateOnboardingNav() {
+  const visibleSteps = buildOnboardingVisibleSteps();
+  const totalSteps = visibleSteps.length;
+  const currentPermissionStep = onboardingCurrentStep - 1;
+  const isWelcomeStep = onboardingCurrentStep === 0;
+  const isLastPermissionStep = currentPermissionStep >= 0 && currentPermissionStep === totalSteps - 1;
+
+  if (onboardingBackBtn) {
+    onboardingBackBtn.hidden = isWelcomeStep;
+  }
+
+  if (onboardingNextBtn) {
+    onboardingNextBtn.hidden = isWelcomeStep || isLastPermissionStep;
+  }
+
+  if (onboardingFinishBtn) {
+    onboardingFinishBtn.hidden = !isLastPermissionStep;
+    updateFinishButtonState();
+  }
+
+  if (onboardingSkipBtn) {
+    onboardingSkipBtn.hidden = !isLastPermissionStep;
+  }
+
+  if (onboardingFinishHint) {
+    onboardingFinishHint.hidden = !isLastPermissionStep || areAllPermissionsReady();
+  }
+}
+
+function updateOnboardingProgressDots() {
+  const visibleSteps = buildOnboardingVisibleSteps();
+  const currentPermissionStep = onboardingCurrentStep - 1;
+
+  onboardingProgressDots.forEach((dot, index) => {
+    const stepName = visibleSteps[index];
+    if (!stepName) {
+      dot.hidden = true;
+      return;
+    }
+    dot.hidden = false;
+    dot.setAttribute("aria-selected", index === currentPermissionStep ? "true" : "false");
+    dot.classList.toggle("is-active", index === currentPermissionStep);
+
+    const stepEl = getOnboardingStepElement(stepName);
+    dot.classList.toggle("is-complete", stepEl && stepEl.dataset.state === "ready");
+  });
+}
+
+function getOnboardingStepElement(stepName) {
+  if (stepName === "mic") return onboardingMicStep;
+  if (stepName === "accessibility") return onboardingAccessibilityStep;
+  if (stepName === "automation") return onboardingAutomationStep;
+  return null;
+}
+
+function advanceOnboardingStep() {
+  const visibleSteps = buildOnboardingVisibleSteps();
+  const nextStep = onboardingCurrentStep + 1;
+  const maxStep = visibleSteps.length;
+
+  if (nextStep <= maxStep) {
+    setTimeout(() => {
+      showOnboardingStep(nextStep);
+    }, 300);
+  }
+}
+
+function goBackOnboardingStep() {
+  const prevStep = Math.max(0, onboardingCurrentStep - 1);
+  showOnboardingStep(prevStep);
+}
+
+function areAllPermissionsReady() {
+  const visibleSteps = buildOnboardingVisibleSteps();
+  return visibleSteps.every((stepName) => {
+    const stepEl = getOnboardingStepElement(stepName);
+    return stepEl && stepEl.dataset.state === "ready";
+  });
+}
+
+function updateFinishButtonState() {
+  if (!onboardingFinishBtn) return;
+  const allReady = areAllPermissionsReady();
+  onboardingFinishBtn.disabled = !allReady;
+  if (onboardingFinishHint) {
+    onboardingFinishHint.hidden = allReady;
+  }
+}
+
 function applyMainTranslations() {
   applyTranslations(document);
   refreshStatusTranslation();
@@ -368,6 +518,12 @@ async function requestOnboardingMicrophonePermission() {
     stream.getTracks().forEach((track) => track.stop());
     setOnboardingStatusKey(onboardingMicStatus, "main.status.microphone_granted", "success");
     setOnboardingStepState(onboardingMicStep, onboardingMicStepState, "ready");
+    if (onboardingMicStep) {
+      onboardingMicStep.classList.add("is-complete");
+    }
+    updateOnboardingProgressDots();
+    updateFinishButtonState();
+    advanceOnboardingStep();
   } catch (error) {
     setOnboardingStatusKey(onboardingMicStatus, "main.status.microphone_denied", "error");
     setOnboardingStepState(onboardingMicStep, onboardingMicStepState, "action_required");
@@ -386,6 +542,12 @@ async function testOnboardingAccessibilityPermission() {
     await invoke("probe_accessibility_permission");
     setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.accessibility_ready", "success");
     setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "ready");
+    if (onboardingAccessibilityStep) {
+      onboardingAccessibilityStep.classList.add("is-complete");
+    }
+    updateOnboardingProgressDots();
+    updateFinishButtonState();
+    advanceOnboardingStep();
   } catch (error) {
     setOnboardingStatusKey(onboardingAccessibilityStatus, "main.status.accessibility_missing", "error");
     setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "action_required");
@@ -404,6 +566,12 @@ async function testOnboardingAutomationPermission() {
     await invoke("probe_system_events_permission");
     setOnboardingStatusKey(onboardingAutomationStatus, "main.status.automation_ready", "success");
     setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "ready");
+    if (onboardingAutomationStep) {
+      onboardingAutomationStep.classList.add("is-complete");
+    }
+    updateOnboardingProgressDots();
+    updateFinishButtonState();
+    advanceOnboardingStep();
   } catch (error) {
     setOnboardingStatusKey(onboardingAutomationStatus, "main.status.automation_missing", "error");
     setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "action_required");
@@ -438,10 +606,10 @@ function applyOnboardingStatus(status) {
   onboardingAccessibilitySettingsBtn.hidden = !supportsPermissionSettings;
   onboardingAutomationSettingsBtn.hidden = !supportsPermissionSettings;
 
-  const needsAccessibility = Boolean(status && status.needsAccessibility);
-  const needsAutomation = Boolean(status && status.needsAutomation);
-  onboardingAccessibilityStep.hidden = !needsAccessibility;
-  onboardingAutomationStep.hidden = !needsAutomation;
+  onboardingNeedsAccessibility = Boolean(status && status.needsAccessibility);
+  onboardingNeedsAutomation = Boolean(status && status.needsAutomation);
+  onboardingAccessibilityStep.hidden = !onboardingNeedsAccessibility;
+  onboardingAutomationStep.hidden = !onboardingNeedsAutomation;
 
   setOnboardingStatusKey(onboardingMicStatus, "main.onboarding.status.not_checked", "neutral");
   setOnboardingStatusKey(onboardingAccessibilityStatus, "main.onboarding.status.not_checked", "neutral");
@@ -450,22 +618,16 @@ function applyOnboardingStatus(status) {
   setOnboardingStepState(onboardingAccessibilityStep, onboardingAccessibilityStepState, "pending");
   setOnboardingStepState(onboardingAutomationStep, onboardingAutomationStepState, "pending");
 
+  if (onboardingMicStep) onboardingMicStep.classList.remove("is-complete");
+  if (onboardingAccessibilityStep) onboardingAccessibilityStep.classList.remove("is-complete");
+  if (onboardingAutomationStep) onboardingAutomationStep.classList.remove("is-complete");
+
   const shouldShow = Boolean(status && !status.completed && !onboardingDismissedForSession);
   setOnboardingVisible(shouldShow);
 
-  if (shouldShow && !onboardingAutoPromptTriggered) {
-    onboardingAutoPromptTriggered = true;
-    requestOnboardingMicrophonePermission();
-    if (needsAccessibility) {
-      setTimeout(() => {
-        testOnboardingAccessibilityPermission();
-      }, 250);
-    }
-    if (needsAutomation) {
-      setTimeout(() => {
-        testOnboardingAutomationPermission();
-      }, 500);
-    }
+  if (shouldShow) {
+    onboardingCurrentStep = 0;
+    showOnboardingStep(0);
   }
 }
 
@@ -749,11 +911,42 @@ onboardingAccessibilitySettingsBtn.addEventListener("click", () => openPermissio
 onboardingAutomationBtn.addEventListener("click", testOnboardingAutomationPermission);
 onboardingAutomationSettingsBtn.addEventListener("click", () => openPermissionSettings("automation"));
 onboardingFinishBtn.addEventListener("click", finishOnboarding);
-onboardingSkipBtn.addEventListener("click", skipOnboardingForSession);
+onboardingSkipBtn.addEventListener("click", (event) => {
+  event.preventDefault();
+  skipOnboardingForSession();
+});
+if (onboardingGetStartedBtn) {
+  onboardingGetStartedBtn.addEventListener("click", () => {
+    showOnboardingStep(1);
+  });
+}
+if (onboardingBackBtn) {
+  onboardingBackBtn.addEventListener("click", goBackOnboardingStep);
+}
+if (onboardingNextBtn) {
+  onboardingNextBtn.addEventListener("click", () => {
+    const visibleSteps = buildOnboardingVisibleSteps();
+    const currentPermissionStep = onboardingCurrentStep - 1;
+    if (currentPermissionStep >= 0 && currentPermissionStep < visibleSteps.length - 1) {
+      showOnboardingStep(onboardingCurrentStep + 1);
+    }
+  });
+}
+onboardingProgressDots.forEach((dot, index) => {
+  dot.addEventListener("click", () => {
+    const targetStep = index + 1;
+    if (targetStep <= buildOnboardingVisibleSteps().length) {
+      showOnboardingStep(targetStep);
+    }
+  });
+});
 document.addEventListener("visibilitychange", handleMainVisibilityChange);
 window.addEventListener("beforeunload", releaseMediaStream);
 
 async function bootstrap() {
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
   await loadUiSettings();
   setRecordingButtons(false);
   stopRecordingVisualizer();

@@ -7,6 +7,106 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- Full-window onboarding panel (outside main for full-viewport experience) -->
+    <section id="onboarding-panel" class="onboarding-fullscreen" hidden>
+      <!-- Welcome step (step 0) -->
+      <div id="onboarding-welcome-step" class="onboarding-hero onboarding-step is-active">
+        <div class="onboarding-hero-icon">
+          <img src="./app-icon.png" alt="" width="72" height="72" />
+        </div>
+        <h1 class="onboarding-hero-title" data-i18n="main.onboarding.welcome.title">Welcome to WhisloAI</h1>
+        <p class="onboarding-hero-subtitle" data-i18n="main.onboarding.welcome.subtitle">Translate and dictate from any app on your desktop.</p>
+        <div class="onboarding-hero-action">
+          <button id="onboarding-get-started-btn" type="button" data-i18n="main.onboarding.get_started">Get started</button>
+        </div>
+      </div>
+
+      <!-- Microphone step (step 1) -->
+      <div id="onboarding-mic-step" class="onboarding-step onboarding-permission-step" data-step="microphone" data-state="pending" hidden>
+        <div class="onboarding-step-content">
+          <span class="onboarding-step-icon" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="mic"></i>
+          </span>
+          <h2 data-i18n="main.onboarding.mic.title">Let's set up your microphone</h2>
+          <p class="onboarding-step-hint" data-i18n="main.onboarding.mic.hint">WhisloAI uses your microphone to transcribe speech before translating it.</p>
+          <div class="onboarding-step-checkmark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle class="checkmark-circle" cx="12" cy="12" r="10"></circle>
+              <path class="checkmark-check" d="M8 12l3 3 5-6"></path>
+            </svg>
+          </div>
+          <p id="onboarding-mic-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+          <div class="onboarding-step-actions">
+            <button id="onboarding-mic-btn" type="button" data-i18n="main.onboarding.mic.allow">Allow microphone</button>
+            <a href="#" id="onboarding-mic-settings-btn" class="onboarding-settings-link" role="button" data-i18n="main.onboarding.system_settings">Open system settings</a>
+          </div>
+          <p id="onboarding-mic-status" class="hint onboarding-status" data-tone="neutral" data-i18n="main.onboarding.status.not_checked">Not checked yet.</p>
+        </div>
+      </div>
+
+      <!-- Accessibility step (step 2) -->
+      <div id="onboarding-accessibility-step" class="onboarding-step onboarding-permission-step" data-step="accessibility" data-state="pending" hidden>
+        <div class="onboarding-step-content">
+          <span class="onboarding-step-icon" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="keyboard"></i>
+          </span>
+          <h2 data-i18n="main.onboarding.accessibility.title">Allow keyboard control</h2>
+          <p class="onboarding-step-hint" data-i18n="main.onboarding.accessibility.hint">So WhisloAI can type and paste into other apps for you.</p>
+          <div class="onboarding-step-checkmark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle class="checkmark-circle" cx="12" cy="12" r="10"></circle>
+              <path class="checkmark-check" d="M8 12l3 3 5-6"></path>
+            </svg>
+          </div>
+          <p id="onboarding-accessibility-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+          <div class="onboarding-step-actions">
+            <button id="onboarding-accessibility-btn" type="button" data-i18n="main.onboarding.accessibility.test">Check access</button>
+            <a href="#" id="onboarding-accessibility-settings-btn" class="onboarding-settings-link" role="button" data-i18n="main.onboarding.system_settings">Open system settings</a>
+          </div>
+          <p id="onboarding-accessibility-status" class="hint onboarding-status" data-tone="neutral" data-i18n="main.onboarding.status.not_checked">Not checked yet.</p>
+        </div>
+      </div>
+
+      <!-- Automation step (step 3) -->
+      <div id="onboarding-automation-step" class="onboarding-step onboarding-permission-step" data-step="automation" data-state="pending" hidden>
+        <div class="onboarding-step-content">
+          <span class="onboarding-step-icon" aria-hidden="true">
+            <i class="icon-lucide" data-lucide="app-window"></i>
+          </span>
+          <h2 data-i18n="main.onboarding.automation.title">Allow app control</h2>
+          <p class="onboarding-step-hint" data-i18n="main.onboarding.automation.hint">So WhisloAI can verify and restore your text input context.</p>
+          <div class="onboarding-step-checkmark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle class="checkmark-circle" cx="12" cy="12" r="10"></circle>
+              <path class="checkmark-check" d="M8 12l3 3 5-6"></path>
+            </svg>
+          </div>
+          <p id="onboarding-automation-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
+          <div class="onboarding-step-actions">
+            <button id="onboarding-automation-btn" type="button" data-i18n="main.onboarding.automation.test">Check access</button>
+            <a href="#" id="onboarding-automation-settings-btn" class="onboarding-settings-link" role="button" data-i18n="main.onboarding.system_settings">Open system settings</a>
+          </div>
+          <p id="onboarding-automation-status" class="hint onboarding-status" data-tone="neutral" data-i18n="main.onboarding.status.not_checked">Not checked yet.</p>
+        </div>
+      </div>
+
+      <!-- Progress dots and navigation -->
+      <div class="onboarding-footer">
+        <div id="onboarding-progress" class="onboarding-progress" role="tablist" aria-label="Onboarding progress">
+          <button class="onboarding-progress-dot" role="tab" aria-selected="false" aria-label="Step 1: Microphone" data-step="1"></button>
+          <button class="onboarding-progress-dot" role="tab" aria-selected="false" aria-label="Step 2: Accessibility" data-step="2"></button>
+          <button class="onboarding-progress-dot" role="tab" aria-selected="false" aria-label="Step 3: Automation" data-step="3"></button>
+        </div>
+        <nav class="onboarding-nav">
+          <button id="onboarding-back-btn" type="button" class="onboarding-nav-back" hidden data-i18n="main.onboarding.back">Back</button>
+          <button id="onboarding-next-btn" type="button" class="onboarding-nav-next" hidden data-i18n="main.onboarding.next">Next</button>
+          <button id="onboarding-finish-btn" type="button" class="onboarding-nav-finish" hidden data-i18n="main.onboarding.finish">Finish setup</button>
+          <a href="#" id="onboarding-skip-btn" class="onboarding-nav-skip" role="button" hidden data-i18n="main.onboarding.skip">Skip for now</a>
+        </nav>
+        <p id="onboarding-finish-hint" class="onboarding-finish-hint" hidden data-i18n="main.onboarding.finish_disabled_hint">Grant all permissions first</p>
+      </div>
+    </section>
+
     <main class="app compact-app">
       <header class="topbar topbar-compact">
         <div>
@@ -18,106 +118,6 @@
           <button id="open-settings-btn" class="secondary" type="button" data-i18n="main.action.settings">Settings</button>
         </div>
       </header>
-
-      <section id="onboarding-panel" class="panel onboarding" hidden>
-        <div class="onboarding-header">
-          <span class="onboarding-brand-mark" aria-hidden="true">
-            <img src="./app-icon.png" alt="" width="28" height="28" />
-          </span>
-          <div class="onboarding-header-copy">
-            <h2 data-i18n="main.onboarding.title">First-run setup</h2>
-            <p class="hint" data-i18n="main.onboarding.hint">Grant permissions once so dictation and auto-insert work reliably.</p>
-            <p class="hint onboarding-platform" data-i18n="main.onboarding.platform_support">Works on macOS, Windows, and Linux.</p>
-          </div>
-        </div>
-
-        <div class="onboarding-steps">
-          <div id="onboarding-mic-step" class="onboarding-step" data-step="microphone" data-state="pending">
-            <h3 data-i18n="main.onboarding.mic.title">1) Microphone access</h3>
-            <p class="hint" data-i18n="main.onboarding.mic.hint">Required for audio transcription.</p>
-            <p id="onboarding-mic-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
-            <div class="actions">
-              <button id="onboarding-mic-btn" type="button" data-i18n="main.onboarding.mic.allow">Allow microphone</button>
-              <button
-                id="onboarding-mic-settings-btn"
-                type="button"
-                class="secondary"
-                data-i18n="main.onboarding.system_settings"
-              >
-                Open system settings
-              </button>
-            </div>
-            <p id="onboarding-mic-status" class="hint onboarding-status" data-tone="neutral" data-i18n="main.onboarding.status.not_checked">Not checked yet.</p>
-          </div>
-
-          <div id="onboarding-accessibility-step" class="onboarding-step" data-step="accessibility" data-state="pending" hidden>
-            <h3 data-i18n="main.onboarding.accessibility.title">2) Accessibility access</h3>
-            <p class="hint" data-i18n="main.onboarding.accessibility.hint">Required so WhisloAI can trigger keyboard shortcuts in other apps.</p>
-            <p id="onboarding-accessibility-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
-            <div class="actions">
-              <button
-                id="onboarding-accessibility-btn"
-                type="button"
-                data-i18n="main.onboarding.accessibility.test"
-              >
-                Check accessibility access
-              </button>
-              <button
-                id="onboarding-accessibility-settings-btn"
-                type="button"
-                class="secondary"
-                data-i18n="main.onboarding.system_settings"
-              >
-                Open system settings
-              </button>
-            </div>
-            <p
-              id="onboarding-accessibility-status"
-              class="hint onboarding-status"
-              data-tone="neutral"
-              data-i18n="main.onboarding.status.not_checked"
-            >
-              Not checked yet.
-            </p>
-          </div>
-
-          <div id="onboarding-automation-step" class="onboarding-step" data-step="automation" data-state="pending" hidden>
-            <h3 data-i18n="main.onboarding.automation.title">3) Automation (System Events)</h3>
-            <p class="hint" data-i18n="main.onboarding.automation.hint">Required on macOS so WhisloAI can verify and restore input context safely.</p>
-            <p id="onboarding-automation-step-state" class="onboarding-step-state" data-i18n="main.onboarding.step.pending">Pending</p>
-            <div class="actions">
-              <button
-                id="onboarding-automation-btn"
-                type="button"
-                data-i18n="main.onboarding.automation.test"
-              >
-                Check automation access
-              </button>
-              <button
-                id="onboarding-automation-settings-btn"
-                type="button"
-                class="secondary"
-                data-i18n="main.onboarding.system_settings"
-              >
-                Open system settings
-              </button>
-            </div>
-            <p
-              id="onboarding-automation-status"
-              class="hint onboarding-status"
-              data-tone="neutral"
-              data-i18n="main.onboarding.status.not_checked"
-            >
-              Not checked yet.
-            </p>
-          </div>
-        </div>
-
-        <div class="actions">
-          <button id="onboarding-finish-btn" type="button" data-i18n="main.onboarding.finish">Finish setup</button>
-          <button id="onboarding-skip-btn" type="button" class="secondary" data-i18n="main.onboarding.skip">Skip for now</button>
-        </div>
-      </section>
 
       <div id="main-content">
         <section id="panel-translate" class="panel is-active" data-panel="translate">
@@ -188,6 +188,7 @@
       </div>
     </main>
 
+    <script src="./vendor/lucide.min.js"></script>
     <script src="./i18n.js"></script>
     <script src="./errors.js"></script>
     <script src="./main.js"></script>
