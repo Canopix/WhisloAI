@@ -196,6 +196,63 @@ test("settings General and Permissions sections expose stronger hierarchy hooks"
   );
 });
 
+test("toolbox lives in settings and no longer in the hidden main surface", () => {
+  const settingsHtml = read("src/settings.html");
+  const mainHtml = read("src/index.html");
+  const settingsJs = read("src/settings.js");
+  const i18n = read("src/i18n.js");
+
+  expectContainsAll(
+    settingsHtml,
+    [
+      'id="nav-toolbox"',
+      'data-view="toolbox"',
+      'id="view-toolbox"',
+      'id="settings-audio-file-input"',
+      'id="settings-choose-audio-btn"',
+      'id="settings-audio-transcript-output"',
+      'id="settings-transcript-actions"',
+      'id="settings-reset-transcript-btn"',
+    ],
+    "src/settings.html",
+  );
+
+  expectContainsAll(
+    settingsJs,
+    [
+      'document.getElementById("settings-audio-file-input")',
+      'document.getElementById("settings-choose-audio-btn")',
+      'document.getElementById("settings-audio-transcript-output")',
+      'document.getElementById("settings-reset-transcript-btn")',
+      'function resetSettingsToolboxState(',
+      'invoke("transcribe_audio", {',
+    ],
+    "src/settings.js",
+  );
+
+  expectContainsAll(
+    i18n,
+    [
+      '"settings.nav.toolbox": "Toolbox"',
+      '"settings.toolbox.audio_to_text.title":',
+      '"settings.toolbox.audio_to_text.choose_file":',
+      '"settings.toolbox.audio_to_text.reset":',
+    ],
+    "src/i18n.js",
+  );
+
+  assert.equal(
+    mainHtml.includes('id="open-toolbox-btn"'),
+    false,
+    "src/index.html should not keep the old Toolbox button",
+  );
+  assert.equal(
+    mainHtml.includes('id="panel-toolbox"'),
+    false,
+    "src/index.html should not keep the old Toolbox panel",
+  );
+});
+
 test("permissions redesign adds richer explainer and CTA hooks", () => {
   const html = read("src/settings.html");
   const i18n = read("src/i18n.js");

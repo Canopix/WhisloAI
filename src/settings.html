@@ -22,6 +22,7 @@
           <button type="button" id="nav-general" class="settings-nav-btn is-active" data-view="general" role="tab" aria-selected="true" aria-controls="view-general" data-i18n="settings.nav.general">General & Permissions</button>
           <button type="button" id="nav-providers" class="settings-nav-btn" data-view="providers" role="tab" aria-selected="false" aria-controls="view-providers" data-i18n="settings.nav.providers">Providers</button>
           <button type="button" id="nav-prompts" class="settings-nav-btn" data-view="prompts" role="tab" aria-selected="false" aria-controls="view-prompts" data-i18n="settings.nav.prompts">Prompts & Modes</button>
+          <button type="button" id="nav-toolbox" class="settings-nav-btn" data-view="toolbox" role="tab" aria-selected="false" aria-controls="view-toolbox" data-i18n="settings.nav.toolbox">Toolbox</button>
         </aside>
 
         <section class="settings-content">
@@ -482,6 +483,57 @@
                 <button type="submit" class="settings-btn-primary" data-i18n="settings.action.save_prompts">Save prompts & modes</button>
               </div>
             </form>
+          </section>
+
+          <section id="view-toolbox" class="settings-view" data-view="toolbox" role="tabpanel" aria-labelledby="nav-toolbox">
+            <div class="settings-card" data-settings-section="toolbox">
+              <div class="panel-header">
+                <h2 data-i18n="settings.toolbox.title">Toolbox</h2>
+                <span class="experimental-badge" data-i18n="settings.toolbox.experimental">Experimental</span>
+              </div>
+              <p class="hint" data-i18n="settings.toolbox.hint">Utility tools that complement your translation workflow.</p>
+
+              <div class="toolbox-section">
+                <h3 data-i18n="settings.toolbox.audio_to_text.title">Audio → Text</h3>
+                <p class="hint" data-i18n="settings.toolbox.audio_to_text.hint">Upload an audio file to transcribe it without recording live.</p>
+
+                <input
+                  type="file"
+                  id="settings-audio-file-input"
+                  accept=".webm,.mp4,.mp3,.ogg,.wav,.m4a,audio/webm,audio/mp4,audio/mpeg,audio/ogg,audio/wav,audio/x-wav,audio/m4a,audio/x-m4a"
+                  hidden
+                />
+
+                <div class="audio-upload-area">
+                  <button id="settings-choose-audio-btn" type="button" class="settings-btn-secondary audio-upload-btn">
+                    <span class="btn-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                      </svg>
+                    </span>
+                    <span data-i18n="settings.toolbox.audio_to_text.choose_file">Choose audio file</span>
+                  </button>
+                  <span id="settings-audio-file-name" class="audio-file-name" hidden></span>
+                </div>
+
+                <div id="settings-audio-transcribe-status" class="hint" data-tone="neutral" hidden></div>
+
+                <label for="settings-audio-transcript-output" data-i18n="settings.toolbox.audio_to_text.transcript">Transcript</label>
+                <textarea
+                  id="settings-audio-transcript-output"
+                  rows="6"
+                  data-i18n-placeholder="settings.toolbox.audio_to_text.transcript_placeholder"
+                  placeholder="Transcript will appear here..."
+                  readonly
+                ></textarea>
+
+                <div class="settings-actions" id="settings-transcript-actions" hidden>
+                  <button id="settings-reset-transcript-btn" type="button" class="settings-btn-secondary" data-i18n="settings.toolbox.audio_to_text.reset">Reset</button>
+                  <button id="settings-copy-transcript-btn" type="button" class="settings-btn-secondary" data-i18n="main.copy_output">Copy output</button>
+                  <button id="settings-insert-transcript-btn" type="button" class="settings-btn-secondary" data-i18n="main.translate.insert">Insert at cursor</button>
+                </div>
+              </div>
+            </div>
           </section>
 
         </section>

@@ -100,6 +100,16 @@ const saveTranscriptionBtn = document.getElementById("save-transcription-btn");
 const whisperModelsContainer = document.getElementById("whisper-models-container");
 const pipelineGuideEls = Array.from(document.querySelectorAll("[data-pipeline-guide]"));
 
+const settingsAudioFileInput = document.getElementById("settings-audio-file-input");
+const settingsChooseAudioBtn = document.getElementById("settings-choose-audio-btn");
+const settingsAudioFileName = document.getElementById("settings-audio-file-name");
+const settingsAudioTranscribeStatus = document.getElementById("settings-audio-transcribe-status");
+const settingsAudioTranscriptOutput = document.getElementById("settings-audio-transcript-output");
+const settingsTranscriptActions = document.getElementById("settings-transcript-actions");
+const settingsResetTranscriptBtn = document.getElementById("settings-reset-transcript-btn");
+const settingsCopyTranscriptBtn = document.getElementById("settings-copy-transcript-btn");
+const settingsInsertTranscriptBtn = document.getElementById("settings-insert-transcript-btn");
+
 const DEFAULT_PROMPT_SETTINGS = {
   translateSystemPrompt:
     "You are a translation assistant. Convert text from {source} into clear, concise, natural {target} for workplace chat. Preserve names and technical terms. Return only final text.",
@@ -125,6 +135,8 @@ let savedLocalModelsDir = "";
 let localModelPathValue = "";
 let activeWhisperDownloadModelId = null;
 const whisperModelProgressEls = new Map();
+let settingsToolboxAudioTranscribing = false;
+let settingsToolboxUploadRequestNonce = 0;
 
 function renderInstalledVersion() {
   if (!settingsInstalledVersionEl) {
@@ -1800,6 +1812,247 @@ if (pickModelsDirBtn) {
   });
 }
 saveTranscriptionBtn.addEventListener("click", saveTranscriptionConfig);
+
+function inferAudioMimeType(file) {
+  const providedType = String(file?.type || "")
+    .trim()
+    .toLowerCase();
+  if (providedType) {
+    return providedType;
+  }
+
+  const fileName = String(file?.name || "").trim().toLowerCase();
+  if (fileName.endsWith(".webm")) return "audio/webm";
+  if (fileName.endsWith(".mp4")) return "audio/mp4";
+  if (fileName.endsWith(".mp3")) return "audio/mpeg";
+  if (fileName.endsWith(".ogg")) return "audio/ogg";
+  if (fileName.endsWith(".wav")) return "audio/wav";
+  if (fileName.endsWith(".m4a")) return "audio/m4a";
+  return "";
+}
+
+function audioFormatLabel(mimeType) {
+  const normalized = String(mimeType || "").trim().toLowerCase();
+  switch (normalized) {
+    case "audio/webm":
+      return "WEBM";
+    case "audio/mp4":
+      return "MP4";
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "MP3";
+    case "audio/ogg":
+      return "OGG";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "WAV";
+    case "audio/m4a":
+    case "audio/x-m4a":
+      return "M4A";
+    default:
+      return "AUDIO";
+  }
+}
+
+function formatFileSize(size) {
+  if (!Number.isFinite(size) || size <= 0) {
+    return "0 KB";
+  }
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function arrayBufferToBase64(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+function setSettingsToolboxAudioStatus(message, tone = "neutral") {
+  if (!settingsAudioTranscribeStatus) return;
+  settingsAudioTranscribeStatus.textContent = message;
+  settingsAudioTranscribeStatus.dataset.tone = tone;
+  settingsAudioTranscribeStatus.hidden = !message;
+}
+
+function setSettingsToolboxAudioStatusKey(key, tone = "neutral", params = null) {
+  setSettingsToolboxAudioStatus(t(key, params), tone);
+}
+
+function setSettingsToolboxBusy(isBusy) {
+  settingsToolboxAudioTranscribing = isBusy;
+  if (settingsChooseAudioBtn) {
+    settingsChooseAudioBtn.disabled = isBusy;
+  }
+  if (settingsAudioFileInput) {
+    settingsAudioFileInput.disabled = isBusy;
+  }
+}
+
+function resetSettingsToolboxState() {
+  settingsToolboxUploadRequestNonce += 1;
+  setSettingsToolboxBusy(false);
+
+  if (settingsAudioFileInput) {
+    settingsAudioFileInput.value = "";
+  }
+  if (settingsAudioFileName) {
+    settingsAudioFileName.textContent = "";
+    settingsAudioFileName.hidden = true;
+  }
+  if (settingsAudioTranscriptOutput) {
+    settingsAudioTranscriptOutput.value = "";
+  }
+  if (settingsTranscriptActions) {
+    settingsTranscriptActions.hidden = true;
+  }
+  setSettingsToolboxAudioStatus("", "neutral");
+  setStatusKey("settings.status.ready", "neutral");
+}
+
+async function transcribeAudioBlobInSettings(blob, mimeTypeOverride = null) {
+  if (!blob || blob.size === 0) {
+    throw new Error(t("settings.toolbox.audio_to_text.no_file"));
+  }
+
+  const base64Audio = arrayBufferToBase64(await blob.arrayBuffer());
+  return invoke("transcribe_audio", {
+    audioBase64: base64Audio,
+    mimeType: mimeTypeOverride || blob.type || null,
+  });
+}
+
+async function handleSettingsAudioFileUpload(file) {
+  if (!file) {
+    setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.no_file", "error");
+    return;
+  }
+
+  const effectiveMimeType = inferAudioMimeType(file);
+  const validTypes = [
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/ogg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/x-m4a",
+    "audio/m4a",
+  ];
+  if (!validTypes.includes(effectiveMimeType) && !file.name.match(/\.(webm|mp4|mp3|ogg|wav|m4a)$/i)) {
+    setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.invalid_format", "error");
+    return;
+  }
+
+  const requestNonce = ++settingsToolboxUploadRequestNonce;
+  setSettingsToolboxBusy(true);
+
+  if (settingsAudioFileName) {
+    settingsAudioFileName.textContent = t("settings.toolbox.audio_to_text.selected_file", {
+      name: file.name,
+      format: audioFormatLabel(effectiveMimeType),
+      size: formatFileSize(file.size),
+    });
+    settingsAudioFileName.hidden = false;
+  }
+
+  setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.preparing", "loading");
+  settingsAudioTranscriptOutput.value = "";
+  if (settingsTranscriptActions) settingsTranscriptActions.hidden = true;
+
+  try {
+    setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.transcribing", "loading");
+
+    const transcript = await transcribeAudioBlobInSettings(file, effectiveMimeType || null);
+
+    if (requestNonce !== settingsToolboxUploadRequestNonce) {
+      return;
+    }
+
+    settingsAudioTranscriptOutput.value = transcript;
+    if (settingsTranscriptActions) settingsTranscriptActions.hidden = false;
+    setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.done", "success");
+  } catch (error) {
+    if (requestNonce !== settingsToolboxUploadRequestNonce) {
+      return;
+    }
+    setSettingsToolboxAudioStatus(normalizeError(error), "error");
+  } finally {
+    if (requestNonce === settingsToolboxUploadRequestNonce) {
+      setSettingsToolboxBusy(false);
+    }
+  }
+}
+
+function handleSettingsChooseAudioFile() {
+  if (settingsAudioFileInput && !settingsToolboxAudioTranscribing) {
+    settingsAudioFileInput.click();
+  }
+}
+
+function handleSettingsAudioFileInputChange(event) {
+  const file = event.target.files?.[0];
+  if (file) {
+    handleSettingsAudioFileUpload(file);
+  }
+  event.target.value = "";
+}
+
+async function copySettingsTranscript() {
+  const text = settingsAudioTranscriptOutput?.value?.trim();
+  if (!text) {
+    setStatusKey("main.status.nothing_to_copy", "error");
+    return;
+  }
+  await navigator.clipboard.writeText(text);
+  setStatusKey("main.status.copied", "success");
+}
+
+async function insertSettingsTranscript() {
+  const text = settingsAudioTranscriptOutput?.value?.trim();
+  if (!text) {
+    setStatusKey("main.status.nothing_to_insert", "error");
+    return;
+  }
+
+  setStatusKey("main.status.copying_inserting", "loading");
+  try {
+    const result = await invoke("auto_insert_text", { text });
+    if (result && result.pasted) {
+      setStatusKey("main.status.inserted", "success");
+      return;
+    }
+    setStatusKey("main.status.paste_failed", "error", { shortcut: "Cmd+V" });
+  } catch (error) {
+    setStatusKey("main.status.insert_failed", "error", { shortcut: "Cmd+V" });
+  }
+}
+
+if (settingsChooseAudioBtn) {
+  settingsChooseAudioBtn.addEventListener("click", handleSettingsChooseAudioFile);
+}
+if (settingsAudioFileInput) {
+  settingsAudioFileInput.addEventListener("change", handleSettingsAudioFileInputChange);
+}
+if (settingsCopyTranscriptBtn) {
+  settingsCopyTranscriptBtn.addEventListener("click", copySettingsTranscript);
+}
+if (settingsInsertTranscriptBtn) {
+  settingsInsertTranscriptBtn.addEventListener("click", insertSettingsTranscript);
+}
+if (settingsResetTranscriptBtn) {
+  settingsResetTranscriptBtn.addEventListener("click", resetSettingsToolboxState);
+}
 
 const settingsNav = document.querySelector(".settings-nav");
 if (settingsNav) {
