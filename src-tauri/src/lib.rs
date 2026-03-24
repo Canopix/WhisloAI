@@ -213,10 +213,14 @@ mod tests {
             audio_file_name(Some("audio/mp4; codecs=mp4a.40.2")),
             "recording.m4a"
         );
+        assert_eq!(audio_file_name(Some("audio/m4a")), "recording.m4a");
+        assert_eq!(audio_file_name(Some("audio/ogg")), "recording.ogg");
         assert_eq!(
             audio_file_name(Some("audio/wav; charset=binary")),
             "recording.wav"
         );
+        assert_eq!(audio_file_name(Some("audio/mpeg")), "recording.mp3");
+        assert_eq!(audio_file_name(Some("audio/x-m4a")), "recording.m4a");
     }
 
     #[test]

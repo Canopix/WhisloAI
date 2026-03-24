@@ -366,6 +366,7 @@ pub(crate) fn audio_file_name(mime_type: Option<&str>) -> String {
     let extension = match normalized.as_str() {
         "audio/webm" => "webm",
         "audio/ogg" => "ogg",
+        "audio/mpeg" | "audio/mp3" => "mp3",
         "audio/mp4" | "audio/m4a" | "audio/x-m4a" => "m4a",
         "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
         _ => "bin",
