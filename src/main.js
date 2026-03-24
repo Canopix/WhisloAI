@@ -80,7 +80,6 @@ let onboardingCurrentStep = 0;
 let onboardingVisibleSteps = [];
 let onboardingNeedsAccessibility = false;
 let onboardingNeedsAutomation = false;
-
 const RECORDING_WAVE_BARS = 24;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
 const STATUS_TONES = new Set(["neutral", "loading", "success", "error"]);
@@ -135,12 +134,18 @@ function normalizeMode(mode) {
 }
 
 function switchTab(tabName) {
-  if (tabName !== "translate") {
+  const validTabs = ["translate"];
+  if (!validTabs.includes(tabName)) {
     return;
   }
-  const panel = document.querySelector('.panel[data-panel="translate"]');
-  if (panel) {
-    panel.classList.add("is-active");
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.classList.remove("is-active");
+    panel.hidden = true;
+  });
+  const targetPanel = document.querySelector(`.panel[data-panel="${tabName}"]`);
+  if (targetPanel) {
+    targetPanel.classList.add("is-active");
+    targetPanel.hidden = false;
   }
 }
 
@@ -681,11 +686,7 @@ async function transcribeRecordedBlob(blob) {
   setStatusKey("main.status.transcribing_audio", "loading");
 
   try {
-    const base64Audio = arrayBufferToBase64(await blob.arrayBuffer());
-    const transcript = await invoke("transcribe_audio", {
-      audioBase64: base64Audio,
-      mimeType: blob.type || null,
-    });
+    const transcript = await transcribeAudioBlob(blob);
 
     translateInput.value = transcript;
     switchTab("translate");
@@ -701,6 +702,18 @@ async function transcribeRecordedBlob(blob) {
     isTranscribingAudio = false;
     setRecordingButtons(false);
   }
+}
+
+async function transcribeAudioBlob(blob, mimeTypeOverride = null) {
+  if (!blob || blob.size === 0) {
+    throw new Error("Audio payload is empty.");
+  }
+
+  const base64Audio = arrayBufferToBase64(await blob.arrayBuffer());
+  return invoke("transcribe_audio", {
+    audioBase64: base64Audio,
+    mimeType: mimeTypeOverride || blob.type || null,
+  });
 }
 
 async function startAudioRecording() {
