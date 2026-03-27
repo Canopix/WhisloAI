@@ -6,27 +6,12 @@ use objc2_app_kit::NSRunningApplication;
 use objc2_application_services::{AXError, AXUIElement, AXValue, AXValueType};
 use objc2_core_foundation::{CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGSize};
 
-const TEXT_ROLES: [&str; 3] = ["AXTextField", "AXTextArea", "AXTextView"];
-const BLOCKED_TERMS: [&str; 11] = [
-    "address",
-    "url",
-    "navigation",
-    "omnibox",
-    "search",
-    "buscar",
-    "password",
-    "contraseña",
-    "contrasena",
-    "email",
-    "correo",
-];
-const BROWSER_BUNDLES: [&str; 6] = [
-    "com.apple.Safari",
-    "com.google.Chrome",
-    "com.brave.Browser",
-    "com.microsoft.edgemac",
-    "org.mozilla.firefox",
-    "company.thebrowser.Browser",
+const TEXT_ROLES: [&str; 5] = [
+    "AXTextField",
+    "AXTextArea",
+    "AXTextView",
+    "AXComboBox",
+    "AXSearchField",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -67,9 +52,7 @@ pub enum AxProbeSkipReason {
     InternalBundle,
     MissingFocusedElement,
     RoleNotTextOrEditable(String),
-    BlockedSearchSubrole,
     BlockedDomInputType(String),
-    BlockedBrowserMetadata(String),
     MissingGeometry,
     TinyGeometry { w: i32, h: i32 },
     BlockedSecureRole(String),
@@ -82,9 +65,7 @@ impl AxProbeSkipReason {
             Self::InternalBundle => "internal_bundle".to_string(),
             Self::MissingFocusedElement => "missing_focused_element".to_string(),
             Self::RoleNotTextOrEditable(role) => format!("role_not_text_or_editable:{role}"),
-            Self::BlockedSearchSubrole => "blocked_search_subrole".to_string(),
             Self::BlockedDomInputType(value) => format!("blocked_dom_input_type:{value}"),
-            Self::BlockedBrowserMetadata(term) => format!("blocked_browser_metadata:{term}"),
             Self::MissingGeometry => "missing_geometry".to_string(),
             Self::TinyGeometry { w, h } => format!("tiny_geometry:{w}x{h}"),
             Self::BlockedSecureRole(role) => format!("blocked_secure_role:{role}"),
@@ -110,7 +91,6 @@ pub struct AxProbeOutput {
 struct AxClassificationCandidate {
     bundle_id: Option<String>,
     role: Option<String>,
-    subrole: Option<String>,
     editable: bool,
     dom_input_type: Option<String>,
     metadata_text: String,
@@ -162,7 +142,6 @@ pub fn probe_focused_anchor_snapshot() -> AxProbeOutput {
     let candidate = AxClassificationCandidate {
         bundle_id: diagnostics.bundle_id.clone(),
         role,
-        subrole,
         editable,
         dom_input_type,
         metadata_text,
@@ -178,9 +157,12 @@ pub fn probe_focused_anchor_snapshot() -> AxProbeOutput {
             diagnostics,
         },
         AxProbeDecision::Hide(reason) => {
-            let fallback_eligible = matches!(
+            let fallback_eligible = !matches!(
                 reason,
-                AxProbeSkipReason::MissingFocusedElement | AxProbeSkipReason::MissingGeometry
+                AxProbeSkipReason::InternalBundle
+                    | AxProbeSkipReason::BlockedDomInputType(_)
+                    | AxProbeSkipReason::BlockedSecureRole(_)
+                    | AxProbeSkipReason::BlockedPasswordMetadata
             );
             AxProbeOutput {
                 decision: AxProbeDecision::Hide(reason),
@@ -207,31 +189,21 @@ fn classify_candidate(candidate: &AxClassificationCandidate) -> AxProbeDecision 
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("unknown");
-
-    if !is_text_role(Some(role)) && !candidate.editable {
-        return AxProbeDecision::Hide(AxProbeSkipReason::RoleNotTextOrEditable(role.to_string()));
-    }
-
-    if candidate
-        .subrole
+    let dom_input_type = candidate
+        .dom_input_type
         .as_deref()
-        .is_some_and(|value| value.eq_ignore_ascii_case("AXSearchField"))
-    {
-        return AxProbeDecision::Hide(AxProbeSkipReason::BlockedSearchSubrole);
+        .map(str::trim)
+        .unwrap_or("");
+    if dom_input_type.eq_ignore_ascii_case("password") {
+        return AxProbeDecision::Hide(AxProbeSkipReason::BlockedDomInputType(
+            "password".to_string(),
+        ));
     }
 
-    if let Some(dom_input_type) = candidate.dom_input_type.as_deref() {
-        if matches!(dom_input_type, "search" | "password" | "email") {
-            return AxProbeDecision::Hide(AxProbeSkipReason::BlockedDomInputType(
-                dom_input_type.to_string(),
-            ));
-        }
-    }
+    let dom_text_like = !dom_input_type.is_empty();
 
-    if should_apply_browser_metadata_block(candidate.bundle_id.as_deref()) {
-        if let Some(term) = contains_blocked_browser_term(&candidate.metadata_text) {
-            return AxProbeDecision::Hide(AxProbeSkipReason::BlockedBrowserMetadata(term));
-        }
+    if !is_text_role(Some(role)) && !candidate.editable && !dom_text_like {
+        return AxProbeDecision::Hide(AxProbeSkipReason::RoleNotTextOrEditable(role.to_string()));
     }
 
     let Some((x, y, w, h)) = candidate.geometry else {
@@ -283,27 +255,6 @@ fn is_text_role(role: Option<&str>) -> bool {
     TEXT_ROLES
         .iter()
         .any(|value| value.eq_ignore_ascii_case(role.trim()))
-}
-
-fn should_apply_browser_metadata_block(bundle_id: Option<&str>) -> bool {
-    let Some(bundle_id) = bundle_id else {
-        return false;
-    };
-
-    BROWSER_BUNDLES
-        .iter()
-        .any(|value| value.eq_ignore_ascii_case(bundle_id))
-}
-
-fn contains_blocked_browser_term(metadata_text: &str) -> Option<String> {
-    if metadata_text.trim().is_empty() {
-        return None;
-    }
-
-    BLOCKED_TERMS
-        .iter()
-        .find(|term| metadata_text.contains(**term))
-        .map(|term| (*term).to_string())
 }
 
 fn collect_metadata_text(element: &AXUIElement, diagnostics: &mut AxProbeDiagnostics) -> String {
@@ -586,7 +537,6 @@ mod tests {
         AxClassificationCandidate {
             bundle_id: Some("com.tinyspeck.slackmacgap".to_string()),
             role: Some(role.to_string()),
-            subrole: None,
             editable,
             dom_input_type: None,
             metadata_text: String::new(),
@@ -621,15 +571,22 @@ mod tests {
     }
 
     #[test]
-    fn classify_candidate_blocks_browser_metadata_for_sensitive_terms() {
-        let mut candidate = candidate("AXTextField", true, Some((1, 2, 120, 24)));
-        candidate.bundle_id = Some("com.google.Chrome".to_string());
-        candidate.metadata_text = "navigation address search".to_string();
+    fn classify_candidate_allows_dom_text_like_inputs_even_when_role_is_not_text() {
+        let mut candidate = candidate("AXGroup", false, Some((1, 2, 120, 24)));
+        candidate.dom_input_type = Some("search".to_string());
+        let output = classify_candidate(&candidate);
+        assert!(matches!(output, AxProbeDecision::Show(_)));
+    }
+
+    #[test]
+    fn classify_candidate_blocks_password_dom_input_type() {
+        let mut candidate = candidate("AXGroup", false, Some((1, 2, 120, 24)));
+        candidate.dom_input_type = Some("password".to_string());
         let output = classify_candidate(&candidate);
         assert_eq!(
             output,
-            AxProbeDecision::Hide(AxProbeSkipReason::BlockedBrowserMetadata(
-                "address".to_string()
+            AxProbeDecision::Hide(AxProbeSkipReason::BlockedDomInputType(
+                "password".to_string()
             ))
         );
     }

@@ -11,9 +11,9 @@ pub(crate) const ANCHOR_HIDE_DEBOUNCE_MS: u128 = 420;
 pub(crate) const ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS: u128 = 1_200;
 
 #[cfg(target_os = "macos")]
-const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 3;
+const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 1;
 #[cfg(target_os = "macos")]
-const AX_NATIVE_FALLBACK_COOLDOWN_MS: u128 = 1_800;
+const AX_NATIVE_FALLBACK_COOLDOWN_MS: u128 = 900;
 
 #[cfg(target_os = "macos")]
 static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock::new();
@@ -356,9 +356,7 @@ pub(crate) fn focused_text_anchor_probe_native(
 #[cfg(target_os = "macos")]
 pub(crate) fn focused_text_anchor_probe_apple_script(app: &tauri::AppHandle) -> FocusedAnchorProbe {
     let script = r#"
-set textRoles to {"AXTextField", "AXTextArea", "AXTextView"}
-set blockedTerms to {"address", "url", "navigation", "omnibox", "search", "buscar", "password", "contraseña", "contrasena", "email", "correo"}
-set browserBundles to {"com.apple.Safari", "com.google.Chrome", "com.brave.Browser", "com.microsoft.edgemac", "org.mozilla.firefox", "company.thebrowser.Browser"}
+set textRoles to {"AXTextField", "AXTextArea", "AXTextView", "AXComboBox", "AXSearchField"}
 set skipPrefix to "SKIP" & tab
 try
   tell application "System Events"
@@ -386,21 +384,15 @@ try
       try
         set isEditable to value of attribute "AXEditable" of focusedElement
       end try
-      if textRoles does not contain roleName and isEditable is not true then return skipPrefix & "role_not_text_or_editable:" & roleName & tab & processBundleId
-
-      set subroleName to ""
-      try
-        set subroleName to value of attribute "AXSubrole" of focusedElement as string
-      end try
-      if subroleName is "AXSearchField" then return skipPrefix & "blocked_search_subrole" & tab & processBundleId
 
       set domInputType to ""
       try
         set domInputType to value of attribute "AXDOMInputType" of focusedElement as string
       end try
       ignoring case
-        if domInputType is "search" or domInputType is "password" or domInputType is "email" then return skipPrefix & "blocked_dom_input_type:" & domInputType & tab & processBundleId
+        if domInputType is "password" then return skipPrefix & "blocked_dom_input_type:password" & tab & processBundleId
       end ignoring
+      if textRoles does not contain roleName and isEditable is not true and domInputType is "" then return skipPrefix & "role_not_text_or_editable:" & roleName & tab & processBundleId
 
       set metadataText to ""
       repeat with attrName in {"AXTitle", "AXDescription", "AXHelp", "AXPlaceholderValue", "AXIdentifier", "AXRoleDescription"}
@@ -411,21 +403,6 @@ try
           end if
         end try
       end repeat
-
-      set shouldApplyBlockedTerms to false
-      repeat with browserBundle in browserBundles
-        if processBundleId is (browserBundle as string) then
-          set shouldApplyBlockedTerms to true
-          exit repeat
-        end if
-      end repeat
-      if shouldApplyBlockedTerms then
-        ignoring case
-          repeat with blocked in blockedTerms
-            if metadataText contains (blocked as string) then return skipPrefix & "blocked_browser_metadata:" & (blocked as string) & tab & processBundleId
-          end repeat
-        end ignoring
-      end if
 
       try
         set p to value of attribute "AXPosition" of focusedElement
@@ -441,7 +418,6 @@ try
       if pw < 2 or ph < 2 then return skipPrefix & "tiny_geometry:" & (pw as string) & "x" & (ph as string) & tab & processBundleId
 
       ignoring case
-        if domInputType is "password" then return skipPrefix & "blocked_password_dom_type" & tab & processBundleId
         if roleName contains "secure" then return skipPrefix & "blocked_secure_role:" & roleName & tab & processBundleId
         if metadataText contains "password" then return skipPrefix & "blocked_password_metadata" & tab & processBundleId
       end ignoring
