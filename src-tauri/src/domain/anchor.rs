@@ -359,50 +359,6 @@ pub(crate) fn focused_text_anchor_probe_apple_script(app: &tauri::AppHandle) -> 
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView", "AXComboBox", "AXSearchField"}
 set skipPrefix to "SKIP" & tab
 
-on elementLooksTextLike(el, textRoles)
-  set roleName to ""
-  try
-    set roleName to value of attribute "AXRole" of el as string
-  end try
-  set isEditable to false
-  try
-    set isEditable to value of attribute "AXEditable" of el
-  end try
-  if isEditable is true then return true
-  if roleName is not "" then
-    if textRoles contains roleName then return true
-  end if
-  return false
-end elementLooksTextLike
-
-on findFocusedOrTextDescendant(rootEl, textRoles)
-  set queue to {rootEl}
-  repeat while (count of queue) > 0
-    set currentEl to item 1 of queue
-    if (count of queue) is 1 then
-      set queue to {}
-    else
-      set queue to items 2 thru -1 of queue
-    end if
-
-    try
-      set isFocused to value of attribute "AXFocused" of currentEl
-      if isFocused is true then
-        if my elementLooksTextLike(currentEl, textRoles) then return currentEl
-      end if
-    end try
-
-    try
-      set children to value of attribute "AXChildren" of currentEl
-      if children is not missing value then
-        set queue to queue & children
-      end if
-    end try
-  end repeat
-
-  return missing value
-end findFocusedOrTextDescendant
-
 try
   tell application "System Events"
     set frontProcess to first application process whose frontmost is true
@@ -433,11 +389,6 @@ try
             try
               set focusedElement to value of attribute "AXFocusedUIElement" of focusedWindow
             end try
-            if focusedElement is missing value then
-              if processBundleId is "com.tinyspeck.slackmacgap" then
-                set focusedElement to my findFocusedOrTextDescendant(focusedWindow, textRoles)
-              end if
-            end if
           end if
         end try
       end if
