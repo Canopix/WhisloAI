@@ -377,7 +377,18 @@ try
     end ignoring
 
     tell frontProcess
-      set focusedElement to value of attribute "AXFocusedUIElement"
+      set focusedElement to missing value
+      try
+        set focusedElement to value of attribute "AXFocusedUIElement"
+      end try
+      if focusedElement is missing value then
+        try
+          set focusedWindow to value of attribute "AXFocusedWindow"
+          if focusedWindow is not missing value then
+            set focusedElement to value of attribute "AXFocusedUIElement" of focusedWindow
+          end if
+        end try
+      end if
       if focusedElement is missing value then return skipPrefix & "missing_focused_element" & tab & processBundleId
       set roleName to value of attribute "AXRole" of focusedElement
       set isEditable to false
