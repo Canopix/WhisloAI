@@ -109,6 +109,9 @@ const settingsTranscriptActions = document.getElementById("settings-transcript-a
 const settingsResetTranscriptBtn = document.getElementById("settings-reset-transcript-btn");
 const settingsCopyTranscriptBtn = document.getElementById("settings-copy-transcript-btn");
 const settingsInsertTranscriptBtn = document.getElementById("settings-insert-transcript-btn");
+const settingsBlockCurrentAppBtn = document.getElementById("settings-block-current-app-btn");
+const settingsBlockedAppsList = document.getElementById("settings-blocked-apps-list");
+const settingsBlockedAppsEmpty = document.getElementById("settings-blocked-apps-empty");
 
 const DEFAULT_PROMPT_SETTINGS = {
   translateSystemPrompt:
@@ -137,6 +140,8 @@ let activeWhisperDownloadModelId = null;
 const whisperModelProgressEls = new Map();
 let settingsToolboxAudioTranscribing = false;
 let settingsToolboxUploadRequestNonce = 0;
+let blockedBundleIds = [];
+let blacklistRequestInFlight = false;
 
 function renderInstalledVersion() {
   if (!settingsInstalledVersionEl) {
@@ -610,12 +615,136 @@ function applySettingsTranslations() {
   applyTranslations(document);
   renderInstalledVersion();
   renderQuickModeOptions();
+  renderBlockedBundleIds();
   bindPipelineScenarioInteractions();
   if (providersLoaded) {
     renderProvidersList(selectedProviderId);
   }
   syncProviderTypeInputs();
   renderPipelineGuides();
+}
+
+function normalizeBundleId(value) {
+  return String(value || "").trim();
+}
+
+function normalizeBlockedBundleIds(values) {
+  const result = [];
+  for (const value of values || []) {
+    const clean = normalizeBundleId(value);
+    if (!clean) {
+      continue;
+    }
+    if (result.some((existing) => existing.toLowerCase() === clean.toLowerCase())) {
+      continue;
+    }
+    result.push(clean);
+  }
+  result.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return result;
+}
+
+function setBlockedBundleIds(nextValues) {
+  blockedBundleIds = normalizeBlockedBundleIds(nextValues);
+  renderBlockedBundleIds();
+}
+
+function renderBlockedBundleIds() {
+  if (!settingsBlockedAppsList) {
+    return;
+  }
+
+  settingsBlockedAppsList.innerHTML = "";
+  const hasRows = blockedBundleIds.length > 0;
+  if (settingsBlockedAppsEmpty) {
+    settingsBlockedAppsEmpty.hidden = hasRows;
+  }
+  settingsBlockedAppsList.hidden = !hasRows;
+
+  if (!hasRows) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const bundleId of blockedBundleIds) {
+    const row = document.createElement("li");
+    row.className = "blocked-apps-item";
+
+    const label = document.createElement("code");
+    label.className = "blocked-apps-bundle-id";
+    label.textContent = bundleId;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "settings-btn-secondary blocked-apps-remove-btn";
+    removeBtn.textContent = t("settings.general.blocked_apps.remove");
+    removeBtn.addEventListener("click", async () => {
+      await removeBlockedBundleId(bundleId);
+    });
+
+    row.appendChild(label);
+    row.appendChild(removeBtn);
+    fragment.appendChild(row);
+  }
+
+  settingsBlockedAppsList.appendChild(fragment);
+}
+
+async function loadBlockedBundleIds() {
+  if (!invoke) {
+    setBlockedBundleIds([]);
+    return;
+  }
+  try {
+    const saved = await invoke("get_blocked_bundle_ids");
+    setBlockedBundleIds(saved);
+  } catch (_) {
+    setBlockedBundleIds([]);
+  }
+}
+
+async function blockCurrentBundleId() {
+  if (!invoke || blacklistRequestInFlight) {
+    return;
+  }
+  blacklistRequestInFlight = true;
+  if (settingsBlockCurrentAppBtn) {
+    settingsBlockCurrentAppBtn.disabled = true;
+  }
+  try {
+    const addedBundleId = normalizeBundleId(await invoke("blacklist_current_app"));
+    if (addedBundleId) {
+      setBlockedBundleIds([...blockedBundleIds, addedBundleId]);
+      setStatus(t("settings.status.blocked_app_added", { bundleId: addedBundleId }), "success");
+    } else {
+      await loadBlockedBundleIds();
+      setStatusKey("settings.status.blocked_app_list_updated", "success");
+    }
+  } catch (error) {
+    setStatus(normalizeError(error), "error");
+  } finally {
+    blacklistRequestInFlight = false;
+    if (settingsBlockCurrentAppBtn) {
+      settingsBlockCurrentAppBtn.disabled = false;
+    }
+  }
+}
+
+async function removeBlockedBundleId(bundleId) {
+  if (!invoke) {
+    return;
+  }
+  const clean = normalizeBundleId(bundleId);
+  if (!clean) {
+    return;
+  }
+  try {
+    const next = await invoke("remove_blocked_bundle_id", { bundleId: clean });
+    setBlockedBundleIds(next);
+    setStatus(t("settings.status.blocked_app_removed", { bundleId: clean }), "success");
+  } catch (error) {
+    setStatus(normalizeError(error), "error");
+  }
 }
 
 function isOpenAiCompatibleType(value) {
@@ -1451,6 +1580,10 @@ resetPromptBtn.addEventListener("click", () => {
   setStatusKey("settings.status.prompt_defaults_restored", "neutral");
 });
 
+if (settingsBlockCurrentAppBtn) {
+  settingsBlockCurrentAppBtn.addEventListener("click", blockCurrentBundleId);
+}
+
 if (uiLanguagePreferenceEl) {
   uiLanguagePreferenceEl.addEventListener("change", () => {
     saveUiPreferences(String(uiLanguagePreferenceEl.value || "system"), currentAnchorBehavior);
@@ -1826,6 +1959,7 @@ function inferAudioMimeType(file) {
   if (fileName.endsWith(".mp4")) return "audio/mp4";
   if (fileName.endsWith(".mp3")) return "audio/mpeg";
   if (fileName.endsWith(".ogg")) return "audio/ogg";
+  if (fileName.endsWith(".opus")) return "audio/opus";
   if (fileName.endsWith(".wav")) return "audio/wav";
   if (fileName.endsWith(".m4a")) return "audio/m4a";
   return "";
@@ -1842,6 +1976,7 @@ function audioFormatLabel(mimeType) {
     case "audio/mp3":
       return "MP3";
     case "audio/ogg":
+    case "audio/opus":
       return "OGG";
     case "audio/wav":
     case "audio/x-wav":
@@ -1944,12 +2079,13 @@ async function handleSettingsAudioFileUpload(file) {
     "audio/mpeg",
     "audio/mp3",
     "audio/ogg",
+    "audio/opus",
     "audio/wav",
     "audio/x-wav",
     "audio/x-m4a",
     "audio/m4a",
   ];
-  if (!validTypes.includes(effectiveMimeType) && !file.name.match(/\.(webm|mp4|mp3|ogg|wav|m4a)$/i)) {
+  if (!validTypes.includes(effectiveMimeType) && !file.name.match(/\.(webm|mp4|mp3|ogg|opus|wav|m4a)$/i)) {
     setSettingsToolboxAudioStatusKey("settings.toolbox.audio_to_text.invalid_format", "error");
     return;
   }
@@ -2125,6 +2261,7 @@ async function bootstrap() {
   await loadAppVersion();
 
   if (!invoke) {
+    setBlockedBundleIds([]);
     renderPipelineGuides();
     setStatusKey("settings.status.app_not_ready", "error");
     return;
@@ -2155,9 +2292,17 @@ async function bootstrap() {
       await listen("whisper-download-progress", (event) => {
         onWhisperDownloadProgress(event?.payload);
       });
+      await listen("blocked-bundle-ids-updated", (event) => {
+        setBlockedBundleIds(event?.payload);
+      });
     }
 
-    await Promise.all([loadProviders(), loadPromptSettings(), loadTranscriptionConfig()]);
+    await Promise.all([
+      loadProviders(),
+      loadPromptSettings(),
+      loadTranscriptionConfig(),
+      loadBlockedBundleIds(),
+    ]);
     await renderWhisperModels();
     renderPipelineGuides();
     setStatusKey("settings.status.ready", "neutral");

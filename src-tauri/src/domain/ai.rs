@@ -366,6 +366,7 @@ pub(crate) fn audio_file_name(mime_type: Option<&str>) -> String {
     let extension = match normalized.as_str() {
         "audio/webm" => "webm",
         "audio/ogg" => "ogg",
+        "audio/opus" => "opus",
         "audio/mpeg" | "audio/mp3" => "mp3",
         "audio/mp4" | "audio/m4a" | "audio/x-m4a" => "m4a",
         "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
@@ -403,29 +404,43 @@ pub(crate) fn probe_input_automation_permission() -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn transcribe_with_local_whisper(
-    model_path: &str,
+fn hint_extension_for_mime(mime_type: Option<&str>) -> Option<&'static str> {
+    let normalized = mime_type
+        .unwrap_or_default()
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    match normalized.as_str() {
+        "audio/webm" => Some("webm"),
+        "audio/ogg" => Some("ogg"),
+        "audio/opus" => Some("opus"),
+        "audio/mpeg" | "audio/mp3" => Some("mp3"),
+        "audio/mp4" | "audio/m4a" | "audio/x-m4a" => Some("m4a"),
+        "audio/wav" | "audio/x-wav" | "audio/wave" => Some("wav"),
+        _ => None,
+    }
+}
+
+fn decode_with_symphonia(
     audio_bytes: &[u8],
-    _mime_type: Option<&str>,
-    source_language: &str,
-) -> Result<String, String> {
-    use symphonia::core::audio::Signal;
+    mime_type: Option<&str>,
+) -> Result<(Vec<f32>, u32), String> {
+    use symphonia::core::audio::{AudioBufferRef, Signal};
+    use symphonia::core::codecs::Decoder as _;
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::probe::Hint;
-    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-
-    log::info!(
-        "local_whisper:start model_path='{}' model_exists={} audio_bytes={} source_language={}",
-        model_path,
-        std::path::Path::new(model_path).exists(),
-        audio_bytes.len(),
-        source_language
-    );
 
     let audio_copy = audio_bytes.to_vec();
     let cursor = std::io::Cursor::new(audio_copy);
     let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
-    let hint = Hint::new();
+    let mut hint = Hint::new();
+    if let Some(ext) = hint_extension_for_mime(mime_type) {
+        hint.with_extension(ext);
+    }
+
     let mut format = symphonia::default::get_probe()
         .format(&hint, mss, &Default::default(), &Default::default())
         .map_err(|e| format!("Could not detect audio format: {e}"))?;
@@ -435,11 +450,20 @@ pub(crate) fn transcribe_with_local_whisper(
         .iter()
         .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
         .ok_or("No audio track found")?;
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &Default::default())
-        .map_err(|e| format!("Could not create decoder: {e}"))?;
+    let mut decoder: Box<dyn symphonia::core::codecs::Decoder> = if track.codec_params.codec
+        == symphonia::core::codecs::CODEC_TYPE_OPUS
+    {
+        Box::new(
+            symphonia_adapter_libopus::OpusDecoder::try_new(&track.codec_params, &Default::default())
+                .map_err(|e| format!("Could not create Opus decoder: {e}"))?,
+        )
+    } else {
+        symphonia::default::get_codecs()
+            .make(&track.codec_params, &Default::default())
+            .map_err(|e| format!("Could not create decoder: {e}"))?
+    };
+
     let sample_rate = track.codec_params.sample_rate.unwrap_or(16000) as u32;
-    use symphonia::core::audio::AudioBufferRef;
     let mut samples: Vec<f32> = Vec::new();
     while let Ok(packet) = format.format.next_packet() {
         if let Ok(decoded) = decoder.decode(&packet) {
@@ -459,9 +483,34 @@ pub(crate) fn transcribe_with_local_whisper(
             }
         }
     }
+
     if samples.is_empty() {
         return Err("No audio samples decoded.".to_string());
     }
+
+    Ok((samples, sample_rate))
+}
+
+pub(crate) fn transcribe_with_local_whisper(
+    model_path: &str,
+    audio_bytes: &[u8],
+    mime_type: Option<&str>,
+    source_language: &str,
+) -> Result<String, String> {
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+    log::info!(
+        "local_whisper:start model_path='{}' model_exists={} audio_bytes={} source_language={}",
+        model_path,
+        std::path::Path::new(model_path).exists(),
+        audio_bytes.len(),
+        source_language
+    );
+
+    let (samples, sample_rate) = decode_with_symphonia(audio_bytes, mime_type).map_err(|error| {
+        format!("Could not decode audio for local transcription: {error}")
+    })?;
+
     let decoded_samples_len = samples.len();
     let resampled = if sample_rate != 16000 {
         let new_len = (samples.len() as u64 * 16000 / sample_rate as u64) as usize;

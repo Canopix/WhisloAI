@@ -153,6 +153,8 @@ pub(crate) struct AppConfig {
     pub(crate) ui_language_preference: String,
     #[serde(default = "default_anchor_behavior")]
     pub(crate) anchor_behavior: String,
+    #[serde(default)]
+    pub(crate) blocked_bundle_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,6 +236,7 @@ impl Default for AppConfig {
             transcription: TranscriptionConfig::default(),
             ui_language_preference: default_ui_language_preference(),
             anchor_behavior: default_anchor_behavior(),
+            blocked_bundle_ids: vec![],
         }
     }
 }
@@ -346,6 +349,32 @@ pub(crate) fn normalize_anchor_behavior(value: &str) -> String {
         "floating" => "floating".to_string(),
         _ => default_anchor_behavior(),
     }
+}
+
+pub(crate) fn is_internal_bundle_identifier(value: &str) -> bool {
+    let normalized = value.trim().to_lowercase();
+    normalized.is_empty()
+        || normalized.contains("whisloai")
+        || normalized.contains("com.whisloai.app")
+}
+
+pub(crate) fn normalize_blocked_bundle_ids(values: &[String]) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for value in values {
+        let clean = value.trim();
+        if clean.is_empty() || is_internal_bundle_identifier(clean) {
+            continue;
+        }
+        if normalized
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(clean))
+        {
+            continue;
+        }
+        normalized.push(clean.to_string());
+    }
+    normalized.sort_by_cached_key(|value| value.to_lowercase());
+    normalized
 }
 
 pub(crate) fn normalize_prompt_settings(settings: &mut PromptSettings) -> bool {
@@ -551,6 +580,12 @@ pub(crate) fn load_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
     let normalized_anchor_behavior = normalize_anchor_behavior(&config.anchor_behavior);
     if normalized_anchor_behavior != config.anchor_behavior {
         config.anchor_behavior = normalized_anchor_behavior;
+        needs_save = true;
+    }
+
+    let normalized_blocked_bundle_ids = normalize_blocked_bundle_ids(&config.blocked_bundle_ids);
+    if normalized_blocked_bundle_ids != config.blocked_bundle_ids {
+        config.blocked_bundle_ids = normalized_blocked_bundle_ids;
         needs_save = true;
     }
 

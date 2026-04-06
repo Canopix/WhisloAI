@@ -9,8 +9,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::domain::anchor::AnchorPosition;
 use crate::domain::config::{
-    default_anchor_behavior, normalize_anchor_behavior, HotkeyConfig, HotkeyTriggerEvent,
-    InputFocusTarget,
+    default_anchor_behavior, normalize_anchor_behavior, normalize_blocked_bundle_ids,
+    HotkeyConfig, HotkeyTriggerEvent, InputFocusTarget,
 };
 use crate::domain::geometry::to_u64_saturating;
 use crate::platform;
@@ -45,6 +45,9 @@ pub(crate) struct LastInputFocusTarget(pub(crate) Mutex<Option<InputFocusTarget>
 
 #[derive(Default)]
 pub(crate) struct AnchorBehaviorMode(pub(crate) Mutex<String>);
+
+#[derive(Default)]
+pub(crate) struct BlockedBundleIds(pub(crate) Mutex<Vec<String>>);
 
 pub(crate) static ANCHOR_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 pub(crate) static SETTINGS_WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
@@ -175,6 +178,30 @@ pub(crate) fn current_anchor_behavior_mode(app: &tauri::AppHandle) -> String {
 
 pub(crate) fn is_anchor_floating_mode(app: &tauri::AppHandle) -> bool {
     current_anchor_behavior_mode(app) == "floating"
+}
+
+pub(crate) fn set_blocked_bundle_ids(app: &tauri::AppHandle, bundle_ids: &[String]) {
+    if let Some(state) = app.try_state::<BlockedBundleIds>() {
+        if let Ok(mut guard) = state.0.lock() {
+            *guard = normalize_blocked_bundle_ids(bundle_ids);
+        }
+    }
+}
+
+pub(crate) fn is_bundle_id_blocked(app: &tauri::AppHandle, bundle_id: &str) -> bool {
+    let clean = bundle_id.trim();
+    if clean.is_empty() {
+        return false;
+    }
+    let Some(state) = app.try_state::<BlockedBundleIds>() else {
+        return false;
+    };
+    let Ok(guard) = state.0.lock() else {
+        return false;
+    };
+    guard
+        .iter()
+        .any(|blocked| blocked.eq_ignore_ascii_case(clean))
 }
 
 pub(crate) fn save_last_input_focus_target(app: &tauri::AppHandle, target: InputFocusTarget) {

@@ -99,6 +99,104 @@ test("settings logic wires permission actions", () => {
   );
 });
 
+test("settings exposes blocked apps controls and wiring", () => {
+  const html = read("src/settings.html");
+  const js = read("src/settings.js");
+
+  expectContainsAll(
+    html,
+    [
+      'id="settings-block-current-app-btn"',
+      'id="settings-blocked-apps-list"',
+      'id="settings-blocked-apps-empty"',
+      'data-i18n="settings.general.blocked_apps.label"',
+      'data-i18n="settings.general.blocked_apps.block_current"',
+    ],
+    "src/settings.html",
+  );
+
+  expectContainsAll(
+    js,
+    [
+      'document.getElementById("settings-block-current-app-btn")',
+      'document.getElementById("settings-blocked-apps-list")',
+      'invoke("blacklist_current_app")',
+      'invoke("get_blocked_bundle_ids")',
+      'invoke("remove_blocked_bundle_id"',
+      'listen("blocked-bundle-ids-updated"',
+    ],
+    "src/settings.js",
+  );
+});
+
+test("widget includes blacklist action and i18n keys", () => {
+  const widgetHtml = read("src/widget.html");
+  const widgetJs = read("src/widget.js");
+  const i18n = read("src/i18n.js");
+
+  expectContainsAll(
+    widgetHtml,
+    [
+      'id="quick-block-app-btn"',
+      'data-i18n-aria-label="widget.blacklist.aria"',
+      'data-i18n-title="widget.blacklist.title"',
+    ],
+    "src/widget.html",
+  );
+
+  expectContainsAll(
+    widgetJs,
+    [
+      'document.getElementById("quick-block-app-btn")',
+      'invoke("blacklist_current_app")',
+      'blockAppBtn.addEventListener("click", blacklistCurrentApp)',
+    ],
+    "src/widget.js",
+  );
+
+  expectContainsAll(
+    i18n,
+    [
+      '"widget.blacklist.aria":',
+      '"widget.blacklist.title":',
+      '"settings.general.blocked_apps.label":',
+      '"settings.general.blocked_apps.block_current":',
+      '"settings.general.blocked_apps.empty":',
+      '"settings.general.blocked_apps.remove":',
+      '"settings.status.blocked_app_added":',
+      '"settings.status.blocked_app_removed":',
+    ],
+    "src/i18n.js",
+  );
+});
+
+test("widget uses fast custom tooltips instead of delayed native title tooltips", () => {
+  const widgetJs = read("src/widget.js");
+  const css = read("src/styles.css");
+
+  expectContainsAll(
+    widgetJs,
+    [
+      "function syncFastTooltips()",
+      'quickToolbar.querySelectorAll("[data-i18n-title]")',
+      'target.setAttribute("data-tooltip", titleText)',
+      'target.removeAttribute("title")',
+    ],
+    "src/widget.js",
+  );
+
+  expectContainsAll(
+    css,
+    [
+      ".quick-toolbar [data-tooltip]",
+      "content: attr(data-tooltip);",
+      "transition:",
+      "90ms",
+    ],
+    "src/styles.css",
+  );
+});
+
 test("onboarding includes dedicated automation step", () => {
   const html = read("src/index.html");
   expectContainsAll(

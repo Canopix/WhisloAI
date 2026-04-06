@@ -12,6 +12,7 @@ pub(crate) fn run() {
         .manage(LastAnchorTimestamp::default())
         .manage(LastInputFocusTarget::default())
         .manage(AnchorBehaviorMode::default())
+        .manage(BlockedBundleIds::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
@@ -61,6 +62,7 @@ pub(crate) fn run() {
 
             let config = load_config(app.handle())?;
             set_anchor_behavior_mode(app.handle(), &config.anchor_behavior);
+            set_blocked_bundle_ids(app.handle(), &config.blocked_bundle_ids);
             if let Err(error) = register_hotkeys(app.handle(), &config.hotkeys) {
                 log::warn!("Global hotkeys were not registered: {error}");
             }
@@ -82,6 +84,7 @@ pub(crate) fn run() {
             commands::get_app_version,
             commands::get_prompt_settings,
             commands::get_ui_settings,
+            commands::get_blocked_bundle_ids,
             commands::get_transcription_config,
             commands::save_transcription_config,
             commands::list_whisper_models,
@@ -107,6 +110,8 @@ pub(crate) fn run() {
             commands::save_hotkeys,
             commands::save_prompt_settings,
             commands::save_ui_settings,
+            commands::blacklist_current_app,
+            commands::remove_blocked_bundle_id,
             commands::save_provider,
             commands::set_active_provider,
             commands::delete_provider,

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
@@ -30,6 +30,80 @@ pub(crate) fn get_ui_settings(app: tauri::AppHandle) -> Result<UiSettings, Strin
         ui_language_preference: normalize_ui_language_preference(&config.ui_language_preference),
         anchor_behavior: normalize_anchor_behavior(&config.anchor_behavior),
     })
+}
+
+fn resolve_blockable_bundle_id(app: &tauri::AppHandle) -> Option<String> {
+    let bundle_id = last_input_focus_target(app)
+        .map(|target| target.bundle_id)
+        .or_else(|| last_external_app(app))
+        .or_else(|| frontmost_external_bundle_id())?;
+    let clean = bundle_id.trim();
+    if clean.is_empty() || is_internal_bundle_identifier(clean) {
+        None
+    } else {
+        Some(clean.to_string())
+    }
+}
+
+#[tauri::command]
+pub(crate) fn get_blocked_bundle_ids(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let config = load_config(&app)?;
+    set_blocked_bundle_ids(&app, &config.blocked_bundle_ids);
+    Ok(config.blocked_bundle_ids)
+}
+
+#[tauri::command]
+pub(crate) fn blacklist_current_app(app: tauri::AppHandle) -> Result<String, String> {
+    let bundle_id = resolve_blockable_bundle_id(&app)
+        .ok_or_else(|| "No active external app detected to blacklist.".to_string())?;
+
+    let mut config = load_config(&app)?;
+    let mut next = config.blocked_bundle_ids.clone();
+    next.push(bundle_id.clone());
+    let normalized = normalize_blocked_bundle_ids(&next);
+    let changed = normalized != config.blocked_bundle_ids;
+
+    if changed {
+        config.blocked_bundle_ids = normalized.clone();
+        save_config(&app, &config)?;
+    }
+
+    set_blocked_bundle_ids(&app, &normalized);
+    let _ = app.emit("blocked-bundle-ids-updated", &normalized);
+    if let Some(anchor) = app.get_webview_window("anchor") {
+        let _ = anchor.hide();
+    }
+
+    Ok(bundle_id)
+}
+
+#[tauri::command]
+pub(crate) fn remove_blocked_bundle_id(
+    app: tauri::AppHandle,
+    bundle_id: String,
+) -> Result<Vec<String>, String> {
+    let clean = bundle_id.trim();
+    if clean.is_empty() {
+        return Err("Bundle id is required.".to_string());
+    }
+
+    let mut config = load_config(&app)?;
+    let filtered: Vec<String> = config
+        .blocked_bundle_ids
+        .iter()
+        .filter(|existing| !existing.eq_ignore_ascii_case(clean))
+        .cloned()
+        .collect();
+    let normalized = normalize_blocked_bundle_ids(&filtered);
+
+    if normalized != config.blocked_bundle_ids {
+        config.blocked_bundle_ids = normalized.clone();
+        save_config(&app, &config)?;
+    }
+
+    set_blocked_bundle_ids(&app, &normalized);
+    let _ = app.emit("blocked-bundle-ids-updated", &normalized);
+    Ok(normalized)
 }
 
 #[tauri::command]

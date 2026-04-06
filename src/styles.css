@@ -451,6 +451,54 @@ body {
   color: #1b3a35;
 }
 
+.blocked-apps-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.blocked-apps-header label {
+  margin: 0;
+}
+
+.blocked-apps-hint {
+  margin-bottom: 8px;
+}
+
+.blocked-apps-empty {
+  margin-top: 8px;
+}
+
+.blocked-apps-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.blocked-apps-item {
+  border: 1px solid #d7e5df;
+  border-radius: 10px;
+  background: #f8fcfa;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.blocked-apps-bundle-id {
+  color: #2a4a45;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.blocked-apps-remove-btn {
+  white-space: nowrap;
+}
+
 .settings-card[data-settings-section="permissions"] {
   background:
     radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.04) 0%, transparent 35%),
@@ -2051,6 +2099,56 @@ button.quick-tool-btn svg {
   fill: none;
 }
 
+.quick-toolbar [data-tooltip] {
+  position: relative;
+}
+
+.quick-toolbar [data-tooltip]::before,
+.quick-toolbar [data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 90ms ease,
+    transform 90ms ease;
+  z-index: 20;
+}
+
+.quick-toolbar [data-tooltip]::before {
+  content: "";
+  bottom: calc(100% + 2px);
+  transform: translate(-50%, 3px);
+  width: 8px;
+  height: 8px;
+  background: rgba(14, 33, 30, 0.96);
+  border-radius: 2px;
+  rotate: 45deg;
+}
+
+.quick-toolbar [data-tooltip]::after {
+  content: attr(data-tooltip);
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 3px);
+  font-size: 11px;
+  line-height: 1.2;
+  color: #f5fffb;
+  background: rgba(14, 33, 30, 0.96);
+  border: 1px solid rgba(135, 184, 170, 0.48);
+  border-radius: 8px;
+  padding: 5px 8px;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(8, 27, 24, 0.25);
+}
+
+.quick-toolbar [data-tooltip]:hover::before,
+.quick-toolbar [data-tooltip]:hover::after,
+.quick-toolbar [data-tooltip]:focus-visible::before,
+.quick-toolbar [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .quick-tool-icon {
   display: inline-flex;
   align-items: center;
@@ -2112,6 +2210,7 @@ button.quick-close-btn:hover {
 .quick-toolbar.is-recording .quick-app-pill,
 .quick-toolbar.is-recording #quick-translate-selection-btn,
 .quick-toolbar.is-recording #quick-improve-selection-btn,
+.quick-toolbar.is-recording #quick-block-app-btn,
 .quick-toolbar.is-recording #quick-settings-btn {
   display: none;
 }
@@ -2503,6 +2602,12 @@ button:disabled {
 
   .pipeline-blocker-btn {
     width: 100%;
+  }
+
+  .blocked-apps-header,
+  .blocked-apps-item {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .settings-nav {

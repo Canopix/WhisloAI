@@ -100,6 +100,27 @@
                     </article>
                   </div>
                 </div>
+
+                <div class="field field-full">
+                  <div class="blocked-apps-header">
+                    <label data-i18n="settings.general.blocked_apps.label">Hidden apps (blacklist)</label>
+                    <button
+                      type="button"
+                      id="settings-block-current-app-btn"
+                      class="settings-btn-secondary"
+                      data-i18n="settings.general.blocked_apps.block_current"
+                    >
+                      Block current app
+                    </button>
+                  </div>
+                  <p class="hint blocked-apps-hint" data-i18n="settings.general.blocked_apps.hint">
+                    When blocked, the contextual anchor will not appear in those apps.
+                  </p>
+                  <p id="settings-blocked-apps-empty" class="hint blocked-apps-empty" data-i18n="settings.general.blocked_apps.empty">
+                    No blocked apps yet.
+                  </p>
+                  <ul id="settings-blocked-apps-list" class="blocked-apps-list" aria-live="polite"></ul>
+                </div>
               </div>
             </div>
 
@@ -500,7 +521,7 @@
                 <input
                   type="file"
                   id="settings-audio-file-input"
-                  accept=".webm,.mp4,.mp3,.ogg,.wav,.m4a,audio/webm,audio/mp4,audio/mpeg,audio/ogg,audio/wav,audio/x-wav,audio/m4a,audio/x-m4a"
+                  accept=".webm,.mp4,.mp3,.ogg,.opus,.wav,.m4a,audio/webm,audio/mp4,audio/mpeg,audio/ogg,audio/opus,audio/wav,audio/x-wav,audio/m4a,audio/x-m4a"
                   hidden
                 />
 

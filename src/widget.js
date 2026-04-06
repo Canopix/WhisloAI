@@ -25,6 +25,7 @@ const dictateBtn = document.getElementById("quick-dictate-btn");
 const dictateIconEl = document.getElementById("quick-dictate-icon");
 const dictateSpinnerEl = document.getElementById("quick-dictate-spinner");
 const quickDictateWaveWrapEl = document.getElementById("quick-dictate-wave-wrap");
+const blockAppBtn = document.getElementById("quick-block-app-btn");
 const settingsBtn = document.getElementById("quick-settings-btn");
 const closeBtn = document.getElementById("quick-close-btn");
 const quickRecordingWaveformEl = document.getElementById("quick-recording-waveform");
@@ -114,6 +115,22 @@ function setCloseIcon(icon) {
   renderLucideIcons();
 }
 
+function syncFastTooltips() {
+  if (!quickToolbar) {
+    return;
+  }
+  const tooltipTargets = quickToolbar.querySelectorAll("[data-i18n-title]");
+  tooltipTargets.forEach((target) => {
+    const titleText = String(target.getAttribute("title") || "").trim();
+    if (titleText) {
+      target.setAttribute("data-tooltip", titleText);
+    } else {
+      target.removeAttribute("data-tooltip");
+    }
+    target.removeAttribute("title");
+  });
+}
+
 function applyWidgetDynamicTranslations() {
   const recordingVisible = quickToolbar.classList.contains("is-recording");
   closeBtn.title = recordingVisible ? t("widget.close.discard.title") : t("widget.close.default.title");
@@ -127,6 +144,7 @@ function applyWidgetDynamicTranslations() {
     stopBtn.setAttribute("aria-label", t("widget.stopRecording.aria"));
   }
   updateDictateButton();
+  syncFastTooltips();
 }
 
 function setRecordingVisualizerVisible(visible) {
@@ -141,6 +159,7 @@ function setRecordingVisualizerVisible(visible) {
   );
   quickToolbar.classList.toggle("is-recording", visible);
   syncQuickWindowLayout(true, visible);
+  syncFastTooltips();
 }
 
 function ensureRecordingBars() {
@@ -246,6 +265,7 @@ function setBusy(busy) {
   quickShell.classList.toggle("is-busy", busy);
   translateSelectionBtn.disabled = busy || isRecording;
   improveSelectionBtn.disabled = busy || isRecording;
+  blockAppBtn.disabled = busy || isRecording;
   settingsBtn.disabled = busy || isRecording;
   dictateBtn.disabled = busy && !isRecording;
 }
@@ -274,6 +294,7 @@ function updateDictateButton() {
   );
   dictateBtn.title = isRecording ? t("widget.dictate.stop.title") : t("widget.dictate.start.title");
   dictateBtn.disabled = isBusy && !isRecording;
+  syncFastTooltips();
 }
 
 function blobToBase64(blob) {
@@ -598,6 +619,22 @@ async function openSettings() {
   }
 }
 
+async function blacklistCurrentApp() {
+  if (isBusy || isRecording) {
+    return;
+  }
+  setBusy(true);
+  try {
+    await invoke("blacklist_current_app");
+    await invoke("close_quick_window");
+  } catch (_) {
+    // silent
+  } finally {
+    setBusy(false);
+    updateDictateButton();
+  }
+}
+
 async function loadQuickMode(force = false) {
   const now = Date.now();
   if (!force && quickModeLoadedAt > 0 && now - quickModeLoadedAt < QUICK_MODE_CACHE_MS) {
@@ -667,6 +704,7 @@ document.addEventListener("click", (event) => {
   }
 });
 settingsBtn.addEventListener("click", openSettings);
+blockAppBtn.addEventListener("click", blacklistCurrentApp);
 closeBtn.addEventListener("click", closeQuick);
 
 document.addEventListener("keydown", (event) => {

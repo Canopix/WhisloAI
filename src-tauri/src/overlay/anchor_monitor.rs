@@ -123,7 +123,18 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 continue;
             }
 
-            let probe = focused_text_anchor_probe(&app);
+            let mut probe = focused_text_anchor_probe(&app);
+            let blocked_bundle_id = probe
+                .snapshot
+                .as_ref()
+                .and_then(|entry| entry.bundle_id.as_deref())
+                .filter(|bundle_id| is_bundle_id_blocked(&app, bundle_id))
+                .map(str::to_string);
+            if let Some(bundle_id) = blocked_bundle_id {
+                probe.snapshot = None;
+                probe.reason = "blocked_by_user_blacklist".to_string();
+                probe.bundle_id = Some(bundle_id);
+            }
             let now_ms = now_millis();
 
             if let Some(entry) = probe.snapshot.as_ref() {

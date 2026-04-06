@@ -48,8 +48,9 @@ mod tests {
     use super::{
         audio_file_name, download_progress_percent, external_target_restore_reason,
         local_prefers_openai_chat_endpoint, local_transcription_block_reason, logical_to_physical,
-        non_empty_trimmed, normalize_anchor_behavior, normalize_local_transcription_output,
-        normalize_provider_base_url, parse_anchor_snapshot_probe_output, point_in_rect,
+        non_empty_trimmed, normalize_anchor_behavior, normalize_blocked_bundle_ids,
+        normalize_local_transcription_output, normalize_provider_base_url,
+        parse_anchor_snapshot_probe_output, point_in_rect,
         provider_endpoint, sanitize_scale_factor, scale_for_logical_point_in_rects,
         should_clear_external_cache_on_restore_error,
         should_clear_external_cache_on_restore_reason, should_hide_contextual_anchor,
@@ -71,6 +72,26 @@ mod tests {
         assert_eq!(normalize_anchor_behavior("FLOATING"), "floating");
         assert_eq!(normalize_anchor_behavior("contextual"), "contextual");
         assert_eq!(normalize_anchor_behavior("anything-else"), "contextual");
+    }
+
+    #[test]
+    fn normalize_blocked_bundle_ids_trims_dedupes_and_filters_internal() {
+        let values = vec![
+            " com.google.Chrome ".to_string(),
+            "com.google.chrome".to_string(),
+            "".to_string(),
+            "com.whisloai.desktop".to_string(),
+            "com.tinyspeck.slackmacgap".to_string(),
+        ];
+
+        let normalized = normalize_blocked_bundle_ids(&values);
+        assert_eq!(
+            normalized,
+            vec![
+                "com.google.Chrome".to_string(),
+                "com.tinyspeck.slackmacgap".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -215,6 +236,7 @@ mod tests {
         );
         assert_eq!(audio_file_name(Some("audio/m4a")), "recording.m4a");
         assert_eq!(audio_file_name(Some("audio/ogg")), "recording.ogg");
+        assert_eq!(audio_file_name(Some("audio/opus")), "recording.opus");
         assert_eq!(
             audio_file_name(Some("audio/wav; charset=binary")),
             "recording.wav"

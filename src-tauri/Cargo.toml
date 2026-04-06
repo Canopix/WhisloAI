@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.22"
+version = "0.1.23"
 description = "WhisloAI desktop app"
 authors = ["you"]
 license = ""
@@ -31,10 +31,11 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 symphonia = { version = "0.5", default-features = false, features = ["all"], optional = true }
 whisper-rs = { version = "0.15", default-features = false, features = ["log_backend"], optional = true }
+symphonia-adapter-libopus = { version = "0.2.7", optional = true }
 
 [features]
 default = ["local-transcription"]
-local-transcription = ["symphonia", "whisper-rs"]
+local-transcription = ["symphonia", "whisper-rs", "symphonia-adapter-libopus"]
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 enigo = { version = "0.3.0", default-features = false }
