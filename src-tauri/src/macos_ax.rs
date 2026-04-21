@@ -1,10 +1,13 @@
 use core::ffi::c_void;
+use std::collections::VecDeque;
 use std::ptr;
 use std::ptr::NonNull;
 
 use objc2_app_kit::NSRunningApplication;
 use objc2_application_services::{AXError, AXUIElement, AXValue, AXValueType};
-use objc2_core_foundation::{CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGSize};
+use objc2_core_foundation::{
+    CFArray, CFBoolean, CFNumber, CFRetained, CFString, CFType, CGPoint, CGSize, Type,
+};
 
 const TEXT_ROLES: [&str; 5] = [
     "AXTextField",
@@ -95,6 +98,13 @@ struct AxClassificationCandidate {
     dom_input_type: Option<String>,
     metadata_text: String,
     geometry: Option<(i32, i32, i32, i32)>,
+}
+
+#[derive(Debug, Clone)]
+struct AxElementCandidate {
+    element: CFRetained<AXUIElement>,
+    classification: AxClassificationCandidate,
+    focused: bool,
 }
 
 pub fn probe_focused_anchor_snapshot() -> AxProbeOutput {
@@ -298,7 +308,22 @@ fn resolve_focused_element(
 
     let focused_window =
         copy_attribute_as_ax_element(&focused_application, "AXFocusedWindow", diagnostics)?;
-    copy_attribute_as_ax_element(&focused_window, "AXFocusedUIElement", diagnostics)
+    if let Some(value) =
+        copy_attribute_as_ax_element(&focused_window, "AXFocusedUIElement", diagnostics)
+    {
+        return Some(value);
+    }
+
+    if diagnostics
+        .bundle_id
+        .as_deref()
+        .is_some_and(|bundle_id| bundle_id.eq_ignore_ascii_case("com.tinyspeck.slackmacgap"))
+    {
+        return find_slack_text_descendant(&focused_window, diagnostics)
+            .map(|candidate| candidate.element);
+    }
+
+    None
 }
 
 fn enrich_diagnostics_with_focused_application(
@@ -340,6 +365,134 @@ fn copy_attribute_as_ax_element(
             None
         }
     }
+}
+
+fn copy_attribute_as_ax_elements(
+    element: &AXUIElement,
+    attribute_name: &str,
+    diagnostics: &mut AxProbeDiagnostics,
+) -> Vec<CFRetained<AXUIElement>> {
+    let value = match copy_attribute_value(element, attribute_name) {
+        Ok(Some(value)) => value,
+        Ok(None) => return Vec::new(),
+        Err(error) => {
+            diagnostics.push_error(attribute_name, error);
+            return Vec::new();
+        }
+    };
+
+    let Ok(array) = value.downcast::<CFArray>() else {
+        diagnostics.push_custom_error(&format!("{attribute_name}:not_cf_array"));
+        return Vec::new();
+    };
+    let array = unsafe { CFRetained::cast_unchecked::<CFArray<AXUIElement>>(array) };
+    array.iter().collect()
+}
+
+fn find_slack_text_descendant(
+    root: &AXUIElement,
+    diagnostics: &mut AxProbeDiagnostics,
+) -> Option<AxElementCandidate> {
+    const MAX_VISITED: usize = 320;
+
+    let mut queue = VecDeque::from(copy_attribute_as_ax_elements(
+        root,
+        "AXChildren",
+        diagnostics,
+    ));
+    let mut visited = 0_usize;
+    let mut best: Option<AxElementCandidate> = None;
+
+    while let Some(element) = queue.pop_front() {
+        visited += 1;
+        if visited > MAX_VISITED {
+            break;
+        }
+
+        if let Some(candidate) = slack_text_candidate(&element, diagnostics) {
+            if candidate.focused
+                || slack_candidate_score(&candidate)
+                    > best.as_ref().map(slack_candidate_score).unwrap_or(0)
+            {
+                best = Some(candidate);
+            }
+            if best.as_ref().is_some_and(|candidate| candidate.focused) {
+                break;
+            }
+        }
+
+        queue.extend(copy_attribute_as_ax_elements(
+            &element,
+            "AXChildren",
+            diagnostics,
+        ));
+    }
+
+    best
+}
+
+fn slack_text_candidate(
+    element: &AXUIElement,
+    diagnostics: &mut AxProbeDiagnostics,
+) -> Option<AxElementCandidate> {
+    let role = read_optional_string_attribute(element, "AXRole", diagnostics);
+    let editable =
+        read_optional_bool_attribute(element, "AXEditable", diagnostics).unwrap_or(false);
+    let dom_input_type = read_optional_string_attribute(element, "AXDOMInputType", diagnostics)
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty());
+    let metadata_text = collect_metadata_text(element, diagnostics);
+    let geometry = match (
+        read_position(element, diagnostics),
+        read_size(element, diagnostics),
+    ) {
+        (Some(position), Some(size)) => Some((
+            position.x.round() as i32,
+            position.y.round() as i32,
+            size.width.round() as i32,
+            size.height.round() as i32,
+        )),
+        _ => None,
+    };
+
+    let classification = AxClassificationCandidate {
+        bundle_id: Some("com.tinyspeck.slackmacgap".to_string()),
+        role,
+        editable,
+        dom_input_type,
+        metadata_text,
+        geometry,
+    };
+    if !matches!(
+        classify_candidate(&classification),
+        AxProbeDecision::Show(_)
+    ) {
+        return None;
+    }
+
+    Some(AxElementCandidate {
+        element: element.retain(),
+        classification,
+        focused: read_optional_bool_attribute(element, "AXFocused", diagnostics).unwrap_or(false),
+    })
+}
+
+fn slack_candidate_score(candidate: &AxElementCandidate) -> i32 {
+    let mut score = 1;
+    let text = candidate.classification.metadata_text.as_str();
+    if text.contains("message") || text.contains("mensaje") || text.contains("composer") {
+        score += 100;
+    }
+    if candidate.classification.editable {
+        score += 20;
+    }
+    if let Some((_, y, w, h)) = candidate.classification.geometry {
+        score += (y / 100).clamp(-20, 20);
+        if w >= 120 && h >= 20 {
+            score += 10;
+        }
+    }
+    score
 }
 
 fn copy_attribute_value(

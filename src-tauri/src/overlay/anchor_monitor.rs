@@ -167,6 +167,18 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 hide_candidate_since_ms = Some(now_ms);
             }
 
+            if probe.snapshot.is_none() {
+                if let (Some(probe_bundle_id), Some(last_snapshot)) = (
+                    probe.bundle_id.as_deref(),
+                    last_valid_contextual_snapshot.as_ref(),
+                ) {
+                    let last_bundle_id = last_snapshot.snapshot.bundle_id.as_deref();
+                    if last_bundle_id != Some(probe_bundle_id) {
+                        last_valid_contextual_snapshot = None;
+                    }
+                }
+            }
+
             let should_hide = should_hide_contextual_anchor(
                 now_ms,
                 hide_candidate_since_ms,

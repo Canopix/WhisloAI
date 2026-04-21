@@ -51,4 +51,4 @@ windows-sys = { version = "0.60.2", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-application-services = { version = "0.3.2", default-features = false, features = ["AXError", "AXUIElement", "AXValue", "HIServices", "libc"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSRunningApplication", "libc"] }
-objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFNumber", "CFString", "CFCGTypes"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["CFArray", "CFNumber", "CFString", "CFCGTypes"] }

@@ -404,6 +404,7 @@ pub(crate) fn probe_input_automation_permission() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "local-transcription")]
 fn hint_extension_for_mime(mime_type: Option<&str>) -> Option<&'static str> {
     let normalized = mime_type
         .unwrap_or_default()
@@ -424,6 +425,7 @@ fn hint_extension_for_mime(mime_type: Option<&str>) -> Option<&'static str> {
     }
 }
 
+#[cfg(feature = "local-transcription")]
 fn decode_with_symphonia(
     audio_bytes: &[u8],
     mime_type: Option<&str>,
@@ -450,18 +452,20 @@ fn decode_with_symphonia(
         .iter()
         .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
         .ok_or("No audio track found")?;
-    let mut decoder: Box<dyn symphonia::core::codecs::Decoder> = if track.codec_params.codec
-        == symphonia::core::codecs::CODEC_TYPE_OPUS
-    {
-        Box::new(
-            symphonia_adapter_libopus::OpusDecoder::try_new(&track.codec_params, &Default::default())
+    let mut decoder: Box<dyn symphonia::core::codecs::Decoder> =
+        if track.codec_params.codec == symphonia::core::codecs::CODEC_TYPE_OPUS {
+            Box::new(
+                symphonia_adapter_libopus::OpusDecoder::try_new(
+                    &track.codec_params,
+                    &Default::default(),
+                )
                 .map_err(|e| format!("Could not create Opus decoder: {e}"))?,
-        )
-    } else {
-        symphonia::default::get_codecs()
-            .make(&track.codec_params, &Default::default())
-            .map_err(|e| format!("Could not create decoder: {e}"))?
-    };
+            )
+        } else {
+            symphonia::default::get_codecs()
+                .make(&track.codec_params, &Default::default())
+                .map_err(|e| format!("Could not create decoder: {e}"))?
+        };
 
     let sample_rate = track.codec_params.sample_rate.unwrap_or(16000) as u32;
     let mut samples: Vec<f32> = Vec::new();
@@ -491,6 +495,7 @@ fn decode_with_symphonia(
     Ok((samples, sample_rate))
 }
 
+#[cfg(feature = "local-transcription")]
 pub(crate) fn transcribe_with_local_whisper(
     model_path: &str,
     audio_bytes: &[u8],
@@ -507,9 +512,8 @@ pub(crate) fn transcribe_with_local_whisper(
         source_language
     );
 
-    let (samples, sample_rate) = decode_with_symphonia(audio_bytes, mime_type).map_err(|error| {
-        format!("Could not decode audio for local transcription: {error}")
-    })?;
+    let (samples, sample_rate) = decode_with_symphonia(audio_bytes, mime_type)
+        .map_err(|error| format!("Could not decode audio for local transcription: {error}"))?;
 
     let decoded_samples_len = samples.len();
     let resampled = if sample_rate != 16000 {
