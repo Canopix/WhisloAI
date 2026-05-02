@@ -1,7 +1,11 @@
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(target_os = "macos")]
+use crate::domain::config::is_internal_bundle_identifier;
 use crate::domain::geometry::logical_to_physical;
+#[cfg(target_os = "macos")]
+use crate::domain::geometry::{physical_to_logical, point_in_rect};
 use crate::overlay::refocus::now_millis;
 use crate::overlay::windows::monitor_scale_factor_for_logical_point;
 
@@ -268,9 +272,10 @@ pub(crate) fn log_contextual_anchor_decision(
     log::info!("{payload}");
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn focused_text_anchor_probe(app: &tauri::AppHandle) -> FocusedAnchorProbe {
     let (native_probe, native_fallback_eligible) = focused_text_anchor_probe_native(app);
-    let should_try_fallback = if let Ok(mut state) = native_fallback_state().lock() {
+    let should_try_applescript = if let Ok(mut state) = native_fallback_state().lock() {
         update_hybrid_fallback_state(
             &mut state,
             native_fallback_eligible,
@@ -282,11 +287,19 @@ pub(crate) fn focused_text_anchor_probe(app: &tauri::AppHandle) -> FocusedAnchor
         native_fallback_eligible
     };
 
-    if !should_try_fallback {
-        return native_probe;
+    let mut probe = if !should_try_applescript {
+        native_probe
+    } else {
+        focused_text_anchor_probe_apple_script(app)
+    };
+
+    if probe.snapshot.is_none() {
+        if let Some(fallback) = contextual_window_cursor_fallback_probe(app) {
+            probe = fallback;
+        }
     }
 
-    focused_text_anchor_probe_apple_script(app)
+    probe
 }
 
 #[cfg(target_os = "macos")]
@@ -307,36 +320,21 @@ pub(crate) fn focused_text_anchor_probe_native(
 
     let probe = match decision {
         crate::macos_ax::AxProbeDecision::Show(snapshot) => {
-            let scale_factor = monitor_scale_factor_for_logical_point(app, snapshot.x, snapshot.y);
-            let px = logical_to_physical(snapshot.x, scale_factor);
-            let py = logical_to_physical(snapshot.y, scale_factor);
-            let pw = logical_to_physical(snapshot.w, scale_factor);
-            let ph = logical_to_physical(snapshot.h, scale_factor);
-            let offset_x = logical_to_physical(10, scale_factor);
-            let offset_y = logical_to_physical(44, scale_factor);
-            let input_focus_point = if pw > 2 && ph > 2 {
-                Some((px + (pw / 2), py + (ph / 2)))
-            } else {
-                None
-            };
             let bundle_id = snapshot.bundle_id.or(diagnostics_bundle_id.clone());
-            FocusedAnchorProbe {
-                snapshot: Some(FocusedAnchorSnapshot {
-                    position: AnchorPosition {
-                        x: px + pw - offset_x,
-                        y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
-                    },
-                    bundle_id: bundle_id.clone(),
-                    input_focus_point,
-                }),
-                reason: "focused_input_detected".to_string(),
+            macos_probe_from_logical_text_rect(
+                app,
+                snapshot.x,
+                snapshot.y,
+                snapshot.w,
+                snapshot.h,
                 bundle_id,
-                source: "native",
+                "focused_input_detected",
+                "native",
                 pid,
-                role: role.clone(),
-                subrole: subrole.clone(),
-                dom_input_type: dom_input_type.clone(),
-            }
+                role.clone(),
+                subrole.clone(),
+                dom_input_type.clone(),
+            )
         }
         crate::macos_ax::AxProbeDecision::Hide(skip_reason) => FocusedAnchorProbe {
             snapshot: None,
@@ -351,6 +349,116 @@ pub(crate) fn focused_text_anchor_probe_native(
     };
 
     (probe, fallback_eligible)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_probe_from_logical_text_rect(
+    app: &tauri::AppHandle,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    bundle_id: Option<String>,
+    reason: &str,
+    source: &'static str,
+    pid: Option<i32>,
+    role: Option<String>,
+    subrole: Option<String>,
+    dom_input_type: Option<String>,
+) -> FocusedAnchorProbe {
+    let scale_factor = monitor_scale_factor_for_logical_point(app, x, y);
+    let px = logical_to_physical(x, scale_factor);
+    let py = logical_to_physical(y, scale_factor);
+    let pw = logical_to_physical(w, scale_factor);
+    let ph = logical_to_physical(h, scale_factor);
+    let offset_x = logical_to_physical(10, scale_factor);
+    let offset_y = logical_to_physical(44, scale_factor);
+    let input_focus_point = if pw > 2 && ph > 2 {
+        Some((px + (pw / 2), py + (ph / 2)))
+    } else {
+        None
+    };
+    FocusedAnchorProbe {
+        snapshot: Some(FocusedAnchorSnapshot {
+            position: AnchorPosition {
+                x: px + pw - offset_x,
+                y: py - offset_y, // Above the input row, not among inline icons (emoji, mic, etc.)
+            },
+            bundle_id: bundle_id.clone(),
+            input_focus_point,
+        }),
+        reason: reason.to_string(),
+        bundle_id,
+        source,
+        pid,
+        role,
+        subrole,
+        dom_input_type,
+    }
+}
+
+/// Native-only fallback: focused *window* + cursor in window (or a lower-center default).
+#[cfg(target_os = "macos")]
+fn contextual_window_cursor_fallback_probe(app: &tauri::AppHandle) -> Option<FocusedAnchorProbe> {
+    const INSET: i32 = 6;
+    let raw = crate::macos_ax::probe_contextual_window_anchor_raw()?;
+    if raw
+        .bundle_id
+        .as_deref()
+        .is_some_and(is_internal_bundle_identifier)
+    {
+        return None;
+    }
+    let max_in_w = (raw.win_w - 2 * INSET).max(0);
+    let max_in_h = (raw.win_h - 2 * INSET).max(0);
+    if max_in_w < 32 || max_in_h < 20 {
+        return None;
+    }
+    let block_w = (480).min(max_in_w).max(64);
+    let block_h = (44).min(max_in_h).max(24);
+    let center_lx = raw.win_x + raw.win_w / 2;
+    let center_ly = raw.win_y + (raw.win_h * 2 / 3);
+    let scale = monitor_scale_factor_for_logical_point(app, center_lx, center_ly);
+    let (cx, cy) = if let Some((mpx, mpy)) = raw.mouse_physical {
+        let mx = physical_to_logical(mpx, scale);
+        let my = physical_to_logical(mpy, scale);
+        if point_in_rect(
+            mx,
+            my,
+            raw.win_x + INSET,
+            raw.win_y + INSET,
+            max_in_w,
+            max_in_h,
+        ) {
+            (mx, my)
+        } else {
+            (center_lx, center_ly)
+        }
+    } else {
+        (center_lx, center_ly)
+    };
+    let half_w = block_w / 2;
+    let half_h = block_h / 2;
+    let min_x = raw.win_x + INSET;
+    let min_y = raw.win_y + INSET;
+    let max_x = raw.win_x + raw.win_w - INSET;
+    let max_y = raw.win_y + raw.win_h - INSET;
+    let sx = (cx - half_w).clamp(min_x, max_x - block_w);
+    let sy = (cy - half_h).clamp(min_y, max_y - block_h);
+    Some(macos_probe_from_logical_text_rect(
+        app,
+        sx,
+        sy,
+        block_w,
+        block_h,
+        raw.bundle_id,
+        "contextual_window_cursor_fallback",
+        "window_context",
+        raw.pid,
+        None,
+        None,
+        None,
+    ))
 }
 
 #[cfg(target_os = "macos")]

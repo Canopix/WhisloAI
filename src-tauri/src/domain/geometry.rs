@@ -14,6 +14,14 @@ pub(crate) fn logical_to_physical(value: i32, scale_factor: f64) -> i32 {
     ((value as f64) * scale_factor).round() as i32
 }
 
+pub(crate) fn physical_to_logical(value: i32, scale_factor: f64) -> i32 {
+    let scale = sanitize_scale_factor(scale_factor);
+    if scale <= 0.0 {
+        return value;
+    }
+    ((value as f64) / scale).round() as i32
+}
+
 pub(crate) fn point_in_rect(
     x: i32,
     y: i32,

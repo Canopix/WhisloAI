@@ -3,6 +3,9 @@ use std::collections::VecDeque;
 use std::ptr;
 use std::ptr::NonNull;
 
+use core_graphics::event::CGEvent;
+use core_graphics::event_source::CGEventSource;
+use core_graphics::event_source::CGEventSourceStateID;
 use objc2_app_kit::NSRunningApplication;
 use objc2_application_services::{AXError, AXUIElement, AXValue, AXValueType};
 use objc2_core_foundation::{
@@ -256,6 +259,59 @@ fn skip_output(
 fn is_internal_bundle_id(bundle_id: &str) -> bool {
     let clean = bundle_id.trim().to_lowercase();
     clean.is_empty() || clean.contains("whisloai") || clean.contains("com.whisloai.app")
+}
+
+/// When `AXFocusedUIElement` is missing (common in web content) but the focused
+/// *window* is available, the anchor can use the window frame plus cursor
+/// (when it falls inside the window) to synthesize a stable placement.
+pub(crate) struct ContextualWindowAnchorRaw {
+    pub bundle_id: Option<String>,
+    pub pid: Option<i32>,
+    pub win_x: i32,
+    pub win_y: i32,
+    pub win_w: i32,
+    pub win_h: i32,
+    pub mouse_physical: Option<(i32, i32)>,
+}
+
+pub(crate) fn probe_contextual_window_anchor_raw() -> Option<ContextualWindowAnchorRaw> {
+    let mut diagnostics = AxProbeDiagnostics::default();
+    let system_wide = unsafe { AXUIElement::new_system_wide() };
+    let focused_app =
+        copy_attribute_as_ax_element(&system_wide, "AXFocusedApplication", &mut diagnostics)?;
+    let pid = read_element_pid(&focused_app, &mut diagnostics);
+    let bundle_id = pid.and_then(bundle_id_for_pid);
+    if let Some(ref bid) = bundle_id {
+        if is_internal_bundle_id(bid) {
+            return None;
+        }
+    }
+    let window = copy_attribute_as_ax_element(&focused_app, "AXFocusedWindow", &mut diagnostics)
+        .or_else(|| copy_attribute_as_ax_element(&focused_app, "AXMainWindow", &mut diagnostics))?;
+    let pos = read_position(&window, &mut diagnostics)?;
+    let size = read_size(&window, &mut diagnostics)?;
+    let win_x = pos.x.round() as i32;
+    let win_y = pos.y.round() as i32;
+    let win_w = size.width.round() as i32;
+    let win_h = size.height.round() as i32;
+    if win_w < 8 || win_h < 8 {
+        return None;
+    }
+    let mouse_physical = (|| {
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+        let event = CGEvent::new(source).ok()?;
+        let loc = event.location();
+        Some((loc.x as i32, loc.y as i32))
+    })();
+    Some(ContextualWindowAnchorRaw {
+        bundle_id,
+        pid,
+        win_x,
+        win_y,
+        win_w,
+        win_h,
+        mouse_physical,
+    })
 }
 
 fn is_text_role(role: Option<&str>) -> bool {

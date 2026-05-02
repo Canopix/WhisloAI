@@ -80,6 +80,7 @@ name = "app"
 version = "0.1.23"
 dependencies = [
  "base64 0.22.1",
+ "core-graphics 0.24.0",
  "enigo",
  "keyring",
  "log",

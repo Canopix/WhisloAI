@@ -48,6 +48,7 @@ mod tests {
     use super::{
         audio_file_name, download_progress_percent, external_target_restore_reason,
         local_prefers_openai_chat_endpoint, local_transcription_block_reason, logical_to_physical,
+        physical_to_logical,
         non_empty_trimmed, normalize_anchor_behavior, normalize_blocked_bundle_ids,
         normalize_local_transcription_output, normalize_provider_base_url,
         parse_anchor_snapshot_probe_output, point_in_rect,
@@ -107,6 +108,12 @@ mod tests {
         assert_eq!(logical_to_physical(11, 1.5), 17);
         assert_eq!(logical_to_physical(10, 2.0), 20);
         assert_eq!(logical_to_physical(-3, 2.0), -6);
+    }
+
+    #[test]
+    fn physical_to_logical_divides_by_scale() {
+        assert_eq!(physical_to_logical(200, 2.0), 100);
+        assert_eq!(physical_to_logical(20, 2.0), 10);
     }
 
     #[test]
