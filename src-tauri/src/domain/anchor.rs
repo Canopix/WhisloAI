@@ -293,12 +293,6 @@ pub(crate) fn focused_text_anchor_probe(app: &tauri::AppHandle) -> FocusedAnchor
         focused_text_anchor_probe_apple_script(app)
     };
 
-    if probe.snapshot.is_none() {
-        if let Some(fallback) = contextual_window_cursor_fallback_probe(app) {
-            probe = fallback;
-        }
-    }
-
     probe
 }
 

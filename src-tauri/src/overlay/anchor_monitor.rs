@@ -90,19 +90,12 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 hide_candidate_since_ms = None;
                 last_valid_contextual_snapshot = None;
 
-                let next = last_anchor_position(&app)
-                    .or_else(|| {
-                        anchor
-                            .outer_position()
-                            .ok()
-                            .map(|pos| AnchorPosition { x: pos.x, y: pos.y })
-                    })
-                    .or_else(|| {
-                        anchor.cursor_position().ok().map(|cursor| AnchorPosition {
-                            x: cursor.x as i32 + 12,
-                            y: cursor.y as i32 + 12,
-                        })
-                    });
+                let next = last_anchor_position(&app).or_else(|| {
+                    anchor
+                        .outer_position()
+                        .ok()
+                        .map(|pos| AnchorPosition { x: pos.x, y: pos.y })
+                });
 
                 if let Some(position) = next {
                     let (x, y) = clamp_anchor_window_position(&anchor, position.x, position.y);
