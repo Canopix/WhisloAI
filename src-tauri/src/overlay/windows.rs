@@ -9,8 +9,8 @@ use crate::domain::geometry::{
 use crate::overlay::anchor_monitor::start_anchor_monitor_once;
 use crate::overlay::refocus::*;
 
-pub(crate) const QUICK_WINDOW_WIDTH_COMPACT: f64 = 252.0;
-pub(crate) const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 252.0;
+pub(crate) const QUICK_WINDOW_WIDTH_COMPACT: f64 = 268.0;
+pub(crate) const QUICK_WINDOW_WIDTH_EXPANDED: f64 = 268.0;
 pub(crate) const QUICK_WINDOW_HEIGHT_COMPACT: f64 = 64.0;
 pub(crate) const QUICK_WINDOW_HEIGHT_EXPANDED: f64 = 96.0;
 

@@ -30,6 +30,17 @@
   box-sizing: border-box;
 }
 
+html.overlay-html,
+html.overlay-html body,
+html.overlay-html body.quick-body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+}
+
 .icon-lucide {
   display: inline-flex;
   align-items: center;
@@ -2017,10 +2028,12 @@ body:has(.onboarding-fullscreen:not([hidden])) .app.compact-app {
 .quick-body {
   margin: 0;
   background: transparent;
+  overflow: hidden;
 }
 
 .overlay-html {
   background: transparent;
+  overflow: hidden;
 }
 
 .quick-shell {
@@ -2031,6 +2044,7 @@ body:has(.onboarding-fullscreen:not([hidden])) .app.compact-app {
   display: grid;
   justify-items: start;
   gap: 4px;
+  overflow: hidden;
 }
 
 .quick-toolbar {
