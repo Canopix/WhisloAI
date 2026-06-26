@@ -79,8 +79,14 @@ const testProviderBtn = document.getElementById("test-provider-btn");
 const newProviderBtn = document.getElementById("new-provider-btn");
 const activateProviderBtn = document.getElementById("activate-provider-btn");
 const deleteProviderBtn = document.getElementById("delete-provider-btn");
+const providerFormStatusEl = document.getElementById("provider-form-status");
+const providerNameField = document.getElementById("provider-name-field");
+const providerTypeField = document.getElementById("provider-type-field");
+const providerBaseUrlField = document.getElementById("provider-base-url-field");
+const providerFieldEls = [providerNameField, providerTypeField, providerBaseUrlField, providerTranslateModelField, providerTranscribeModelField, providerApiKeyField];
 
 const promptForm = document.getElementById("prompt-form");
+const promptsStatusEl = document.getElementById("prompts-status");
 const promptTranslateSystem = document.getElementById("prompt-translate-system");
 const sourceLanguage = document.getElementById("source-language");
 const targetLanguage = document.getElementById("target-language");
@@ -94,6 +100,7 @@ const resetPromptBtn = document.getElementById("reset-prompt-btn");
 
 const transcriptionMode = document.getElementById("transcription-mode");
 const transcriptionLocalSection = document.getElementById("transcription-local-section");
+const transcriptionStatusEl = document.getElementById("transcription-status");
 const localModelsDir = document.getElementById("local-models-dir");
 const pickModelsDirBtn = document.getElementById("pick-models-dir-btn");
 const saveTranscriptionBtn = document.getElementById("save-transcription-btn");
@@ -301,13 +308,36 @@ function providerHost(baseUrl) {
   }
 }
 
-function setStatus(message, tone = "neutral") {
-  statusEl.textContent = message;
-  statusEl.dataset.tone = tone;
+const SECTION_STATUS_SCOPES = {
+  provider: () => providerFormStatusEl,
+  transcription: () => transcriptionStatusEl,
+  prompts: () => promptsStatusEl,
+};
+
+function resolveScopedStatusEl(scope) {
+  if (scope && Object.prototype.hasOwnProperty.call(SECTION_STATUS_SCOPES, scope)) {
+    const el = SECTION_STATUS_SCOPES[scope] && SECTION_STATUS_SCOPES[scope]();
+    if (el) {
+      return el;
+    }
+  }
+  return statusEl;
 }
 
-function setStatusKey(key, tone = "neutral", params) {
-  setStatus(t(key, params), tone);
+function setStatus(message, tone = "neutral", scope) {
+  const target = resolveScopedStatusEl(scope);
+  target.textContent = message;
+  target.dataset.tone = tone;
+}
+
+function setStatusKey(key, tone = "neutral", scope, params) {
+  setStatus(t(key, params), tone, scope);
+}
+
+function clearStatus(scope) {
+  const target = resolveScopedStatusEl(scope);
+  target.textContent = "";
+  target.dataset.tone = "neutral";
 }
 
 async function openExternalUrl(url) {
@@ -553,6 +583,10 @@ function activateView(view, syncHash = true) {
 
   if (nextView !== "providers") {
     setStatusKey("settings.status.ready", "neutral");
+    clearStatus("provider");
+    clearFieldErrors();
+  } else {
+    clearStatus("global");
   }
 }
 
@@ -1143,6 +1177,62 @@ function buildProviderPayload() {
   };
 }
 
+const PROVIDER_FIELD_BY_KEY = {
+  name: "provider-name",
+  baseUrl: "provider-base-url",
+  translateModel: "provider-translate-model",
+  transcribeModel: "provider-transcribe-model",
+  apiKey: "provider-api-key",
+};
+
+function validateProvider(payload, openAiProvider, requiresTranscribeModel) {
+  const errors = {};
+  if (!payload.name) {
+    errors[PROVIDER_FIELD_BY_KEY.name] = t("settings.field.error.name_required");
+  }
+  if (!payload.baseUrl) {
+    errors[PROVIDER_FIELD_BY_KEY.baseUrl] = t("settings.field.error.base_url_required");
+  }
+  if (openAiProvider && !payload.translateModel) {
+    errors[PROVIDER_FIELD_BY_KEY.translateModel] = t("settings.field.error.translate_model_required");
+  }
+  if (requiresTranscribeModel && !payload.transcribeModel) {
+    errors[PROVIDER_FIELD_BY_KEY.transcribeModel] = t("settings.field.error.transcribe_model_required");
+  }
+  return errors;
+}
+
+function showFieldErrors(errorMap) {
+  providerFieldEls.forEach((field) => {
+    const input = field ? field.querySelector("input, select, textarea") : null;
+    const errorEl = field ? field.querySelector(".field-error") : null;
+    const key = input ? input.id : null;
+    const message = key ? errorMap[key] : null;
+    if (!errorEl) return;
+    if (message) {
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+      field.classList.add("has-error");
+    } else {
+      errorEl.textContent = "";
+      errorEl.hidden = true;
+      field.classList.remove("has-error");
+    }
+  });
+}
+
+function clearFieldErrors() {
+  providerFieldEls.forEach((field) => {
+    if (!field) return;
+    const errorEl = field.querySelector(".field-error");
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.hidden = true;
+    }
+    field.classList.remove("has-error");
+  });
+}
+
 function syncProviderButtons() {
   const selected = cachedProviders.find((provider) => provider.id === selectedProviderId) || null;
   activateProviderBtn.disabled = !selected || selected.isActive;
@@ -1164,6 +1254,8 @@ function fillProviderForm(provider) {
   providerApiKey.placeholder = "sk-...";
   syncProviderTypeInputs();
   syncProviderButtons();
+  clearFieldErrors();
+  clearStatus("provider");
 }
 
 function resetProviderForm() {
@@ -1179,6 +1271,8 @@ function resetProviderForm() {
   providerApiKey.placeholder = "sk-...";
   syncProviderTypeInputs();
   syncProviderButtons();
+  clearFieldErrors();
+  clearStatus("provider");
   providerName.focus();
 }
 
@@ -1276,17 +1370,15 @@ async function saveProvider(event) {
   const payload = buildProviderPayload();
   const openAiProvider = !isOpenAiCompatibleType(payload.providerType);
   const requiresTranscribeModel = openAiProvider && normalizedTranscriptionMode() === "api";
-  if (
-    !payload.name ||
-    !payload.baseUrl ||
-    (openAiProvider && !payload.translateModel) ||
-    (requiresTranscribeModel && !payload.transcribeModel)
-  ) {
-    setStatusKey("settings.status.complete_provider_fields", "error");
+  const errors = validateProvider(payload, openAiProvider, requiresTranscribeModel);
+  if (Object.keys(errors).length) {
+    showFieldErrors(errors);
+    setStatusKey("settings.status.complete_provider_fields", "error", "provider");
     return;
   }
+  clearFieldErrors();
 
-  setStatusKey("settings.status.saving_provider", "loading");
+  setStatusKey("settings.status.saving_provider", "loading", "provider");
 
   try {
     const keyValue = providerApiKey.value.trim();
@@ -1302,26 +1394,27 @@ async function saveProvider(event) {
         ? t("settings.status.saved_provider", { name: saved.name })
         : t("settings.status.saved_provider_no_key", { name: saved.name }),
       "success",
+      "provider",
     );
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "provider");
   }
 }
 
 async function activateProvider() {
   const currentId = providerId.value.trim();
   if (!currentId) {
-    setStatusKey("settings.status.select_provider_activate", "error");
+    setStatusKey("settings.status.select_provider_activate", "error", "provider");
     return;
   }
 
   const selected = cachedProviders.find((provider) => provider.id === currentId) || null;
   if (selected?.isActive) {
-    setStatus(t("settings.status.provider_already_active", { name: selected.name }), "neutral");
+    setStatus(t("settings.status.provider_already_active", { name: selected.name }), "neutral", "provider");
     return;
   }
 
-  setStatusKey("settings.status.setting_active_provider", "loading");
+  setStatusKey("settings.status.setting_active_provider", "loading", "provider");
   try {
     await invoke("set_active_provider", { providerId: currentId });
     await loadProviders(currentId);
@@ -1331,22 +1424,23 @@ async function activateProvider() {
         name: provider ? provider.name : t("settings.status.active_provider_updated"),
       }),
       "success",
+      "provider",
     );
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "provider");
   }
 }
 
 async function deleteProvider() {
   const currentId = providerId.value.trim();
   if (!currentId) {
-    setStatusKey("settings.status.select_provider_delete", "error");
+    setStatusKey("settings.status.select_provider_delete", "error", "provider");
     return;
   }
 
   const selected = cachedProviders.find((provider) => provider.id === currentId) || null;
   if (!selected) {
-    setStatusKey("settings.status.selected_provider_not_found", "error");
+    setStatusKey("settings.status.selected_provider_not_found", "error", "provider");
     return;
   }
 
@@ -1355,33 +1449,38 @@ async function deleteProvider() {
     return;
   }
 
-  setStatus(t("settings.status.deleting_provider", { name: selected.name }), "loading");
+  setStatus(t("settings.status.deleting_provider", { name: selected.name }), "loading", "provider");
   try {
     await invoke("delete_provider", { providerId: currentId });
     await loadProviders();
-    setStatus(t("settings.status.deleted_provider", { name: selected.name }), "success");
+    setStatus(t("settings.status.deleted_provider", { name: selected.name }), "success", "provider");
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "provider");
   }
 }
 
 async function testProvider() {
   const payload = buildProviderPayload();
-  if (!payload.name || !payload.baseUrl) {
-    setStatusKey("settings.status.complete_name_url_test", "error");
+  const errors = {};
+  if (!payload.name) errors["provider-name"] = t("settings.field.error.name_required");
+  if (!payload.baseUrl) errors["provider-base-url"] = t("settings.field.error.base_url_required");
+  if (Object.keys(errors).length) {
+    showFieldErrors(errors);
+    setStatusKey("settings.status.complete_name_url_test", "error", "provider");
     return;
   }
+  clearFieldErrors();
 
-  setStatus(t("settings.status.testing_provider", { name: payload.name }), "loading");
+  setStatus(t("settings.status.testing_provider", { name: payload.name }), "loading", "provider");
   try {
     const apiKeyPayload = providerApiKey.value.trim() || null;
     const message = await invoke("test_provider_connection_input", {
       provider: payload,
       apiKey: apiKeyPayload,
     });
-    setStatus(message, "success");
+    setStatus(message, "success", "provider");
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "provider");
   }
 }
 
@@ -1444,24 +1543,24 @@ async function savePromptSettings(event) {
     !payload.modeInstructions.casual ||
     !payload.modeInstructions.formal
   ) {
-    setStatusKey("settings.status.complete_prompts", "error");
+    setStatusKey("settings.status.complete_prompts", "error", "prompts");
     return;
   }
 
   const sourceLanguageNormalized = payload.sourceLanguage.trim().toLowerCase();
   const targetLanguageNormalized = payload.targetLanguage.trim().toLowerCase();
   if (sourceLanguageNormalized === targetLanguageNormalized) {
-    setStatusKey("settings.status.source_target_must_differ", "error");
+    setStatusKey("settings.status.source_target_must_differ", "error", "prompts");
     return;
   }
 
-  setStatusKey("settings.status.saving_prompts", "loading");
+  setStatusKey("settings.status.saving_prompts", "loading", "prompts");
   try {
     const saved = await invoke("save_prompt_settings", { promptSettings: payload });
     fillPromptForm(saved);
-    setStatusKey("settings.status.prompts_saved", "success");
+    setStatusKey("settings.status.prompts_saved", "success", "prompts");
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "prompts");
   }
 }
 
@@ -1902,7 +2001,7 @@ async function renderWhisperModels() {
 
 async function saveTranscriptionConfig() {
   if (!invoke) return;
-  setStatusKey("settings.status.saving_transcription", "loading");
+  setStatusKey("settings.status.saving_transcription", "loading", "transcription");
   try {
     const path = transcriptionMode.value === "local" ? localModelPathValue : "";
     const modelsDir = normalizeDirectoryPath(localModelsDir?.value);
@@ -1918,9 +2017,9 @@ async function saveTranscriptionConfig() {
       localModelsDir.value = savedLocalModelsDir;
     }
     await renderWhisperModels();
-    setStatusKey("settings.status.transcription_saved", "success");
+    setStatusKey("settings.status.transcription_saved", "success", "transcription");
   } catch (error) {
-    setStatus(normalizeError(error), "error");
+    setStatus(normalizeError(error), "error", "transcription");
   }
 }
 
@@ -2168,9 +2267,9 @@ async function insertSettingsTranscript() {
       setStatusKey("main.status.inserted", "success");
       return;
     }
-    setStatusKey("main.status.paste_failed", "error", { shortcut: "Cmd+V" });
+    setStatusKey("main.status.paste_failed", "error", "global", { shortcut: "Cmd+V" });
   } catch (error) {
-    setStatusKey("main.status.insert_failed", "error", { shortcut: "Cmd+V" });
+    setStatusKey("main.status.insert_failed", "error", "global", { shortcut: "Cmd+V" });
   }
 }
 

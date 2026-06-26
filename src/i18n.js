@@ -212,6 +212,11 @@
       "settings.field.api_key_optional_placeholder": "Optional",
       "settings.field.api_key_hint":
         "Required for OpenAI. Optional for OpenAI-compatible (LM Studio/Ollama). Leave unchanged to keep current key.",
+      "settings.field.error.name_required": "Name is required.",
+      "settings.field.error.base_url_required": "Base URL is required.",
+      "settings.field.error.translate_model_required": "Text model is required for OpenAI providers.",
+      "settings.field.error.transcribe_model_required": "Transcription model is required when transcription mode is API.",
+      "settings.field.error.api_key_required": "API key is required for OpenAI providers.",
       "settings.action.delete_provider": "Delete provider",
       "settings.action.set_active": "Set active",
       "settings.action.test_connection": "Test connection",
@@ -573,6 +578,11 @@
       "settings.field.api_key_optional_placeholder": "Opcional",
       "settings.field.api_key_hint":
         "Requerida para OpenAI. Opcional para OpenAI-compatible (LM Studio/Ollama). Dejala sin cambios para conservar la clave actual.",
+      "settings.field.error.name_required": "El nombre es obligatorio.",
+      "settings.field.error.base_url_required": "La URL base es obligatoria.",
+      "settings.field.error.translate_model_required": "El modelo de texto es obligatorio para proveedores OpenAI.",
+      "settings.field.error.transcribe_model_required": "El modelo de transcripción es obligatorio cuando el modo es API.",
+      "settings.field.error.api_key_required": "La API key es obligatoria para proveedores OpenAI.",
       "settings.action.delete_provider": "Eliminar proveedor",
       "settings.action.set_active": "Marcar activo",
       "settings.action.test_connection": "Probar conexión",

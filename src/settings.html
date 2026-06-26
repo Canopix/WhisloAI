@@ -266,61 +266,33 @@
                 </div>
                 <p id="provider-details-hint" class="hint" data-i18n="settings.provider.details.hint">Configure connection and models for the selected provider. Test and save when ready.</p>
                 <input id="provider-id" type="hidden" />
-                <section id="pipeline-guide-providers" class="pipeline-guide pipeline-guide-inline" data-pipeline-guide="providers" aria-live="polite">
-                  <div class="pipeline-inline-header">
-                    <span class="pipeline-inline-title" data-i18n="settings.pipeline.inline.title">Guided mode</span>
-                    <span class="pipeline-inline-status" data-pipeline-preflight data-state="checking">
-                      <span data-pipeline-preflight-title data-i18n="settings.pipeline.status.checking">Checking configuration...</span>
-                    </span>
-                  </div>
-                  <div class="pipeline-scenarios pipeline-scenarios-inline" role="list">
-                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="api_full">
-                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">☁️</span>
-                      <span class="pipeline-scenario-inline-copy">
-                        <strong data-i18n="settings.pipeline.scenario.api.title">Cloud</strong>
-                        <small data-i18n="settings.pipeline.scenario.api.inline">API speech + text</small>
-                      </span>
-                    </button>
-                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="mixed">
-                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">🔀</span>
-                      <span class="pipeline-scenario-inline-copy">
-                        <strong data-i18n="settings.pipeline.scenario.mixed.title">Hybrid</strong>
-                        <small data-i18n="settings.pipeline.scenario.mixed.inline">Local speech + cloud text</small>
-                      </span>
-                    </button>
-                    <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="all_local">
-                      <span class="pipeline-scenario-inline-icon" aria-hidden="true">🖥️</span>
-                      <span class="pipeline-scenario-inline-copy">
-                        <strong data-i18n="settings.pipeline.scenario.local.title">Local</strong>
-                        <small data-i18n="settings.pipeline.scenario.local.inline">Local speech + local text</small>
-                      </span>
-                    </button>
-                  </div>
-                  <p class="pipeline-inline-next" data-pipeline-next-action></p>
-                </section>
 
                 <div class="settings-form-grid">
-                  <div class="field">
+                  <div class="field" id="provider-name-field">
                     <label for="provider-name" data-i18n="settings.field.name">Name</label>
                     <input id="provider-name" type="text" placeholder="OpenAI" required />
+                    <small class="field-error" data-field-error="provider-name" hidden></small>
                   </div>
 
-                  <div class="field">
+                  <div class="field" id="provider-type-field">
                     <label for="provider-type" data-i18n="settings.field.type">Type</label>
                     <select id="provider-type">
                       <option value="openai" data-i18n="settings.field.type.openai">OpenAI</option>
                       <option value="openai-compatible" data-i18n="settings.field.type.openai_compatible">OpenAI-compatible</option>
                     </select>
+                    <small class="field-error" data-field-error="provider-type" hidden></small>
                   </div>
 
-                  <div class="field field-full">
+                  <div class="field field-full" id="provider-base-url-field">
                     <label for="provider-base-url" data-i18n="settings.field.base_url">Base URL</label>
                     <input id="provider-base-url" type="url" placeholder="https://api.openai.com/v1" required />
+                    <small class="field-error" data-field-error="provider-base-url" hidden></small>
                   </div>
 
                   <div class="field" id="provider-translate-model-field">
                     <label for="provider-translate-model" data-i18n="settings.field.translate_model">Translate model</label>
                     <input id="provider-translate-model" type="text" placeholder="gpt-4.1-mini" required />
+                    <small class="field-error" data-field-error="provider-translate-model" hidden></small>
                   </div>
 
                   <div class="field" id="provider-transcribe-model-field">
@@ -334,6 +306,7 @@
                     <small id="provider-transcribe-model-hint" class="field-hint" data-i18n="settings.field.transcribe_model_hint">
                       Used only when transcription mode is API.
                     </small>
+                    <small class="field-error" data-field-error="provider-transcribe-model" hidden></small>
                   </div>
 
                   <div class="field" id="provider-api-key-field">
@@ -342,17 +315,60 @@
                     <small id="provider-api-key-hint" class="field-hint" data-i18n="settings.field.api_key_hint" hidden>
                       Stored locally. Leave unchanged to keep the current key.
                     </small>
+                    <small class="field-error" data-field-error="provider-api-key" hidden></small>
                   </div>
                 </div>
 
-                <div class="settings-actions">
-                  <button type="button" id="delete-provider-btn" class="settings-btn-danger provider-edit-only" data-i18n="settings.action.delete_provider">Delete provider</button>
-                  <button type="button" id="activate-provider-btn" class="settings-btn-secondary provider-edit-only" data-i18n="settings.action.set_active">Set active</button>
-                  <button type="button" id="test-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.test_connection">
-                    Test connection
-                  </button>
-                  <button type="submit" id="save-provider-btn" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
+                <div id="provider-form-status" class="section-status" role="status" aria-live="polite" data-tone="neutral"></div>
+
+                <div class="settings-actions settings-actions-split">
+                  <div class="settings-actions-row settings-actions-destructive">
+                    <button type="button" id="delete-provider-btn" class="settings-btn-danger provider-edit-only" data-i18n="settings.action.delete_provider">Delete provider</button>
+                  </div>
+                  <div class="settings-actions-row">
+                    <button type="button" id="activate-provider-btn" class="settings-btn-secondary provider-edit-only" data-i18n="settings.action.set_active">Set active</button>
+                    <button type="button" id="test-provider-btn" class="settings-btn-secondary" data-i18n="settings.action.test_connection">
+                      Test connection
+                    </button>
+                    <button type="submit" id="save-provider-btn" class="settings-btn-primary" data-i18n="settings.action.save_provider">Save provider</button>
+                  </div>
                 </div>
+
+                <details class="pipeline-guide-details">
+                  <summary class="pipeline-guide-summary" data-i18n="settings.pipeline.inline.title">Guided mode</summary>
+                  <section id="pipeline-guide-providers" class="pipeline-guide pipeline-guide-inline" data-pipeline-guide="providers" aria-live="polite">
+                    <div class="pipeline-inline-header">
+                      <span class="pipeline-inline-title" data-i18n="settings.pipeline.inline.title">Guided mode</span>
+                      <span class="pipeline-inline-status" data-pipeline-preflight data-state="checking">
+                        <span data-pipeline-preflight-title data-i18n="settings.pipeline.status.checking">Checking configuration...</span>
+                      </span>
+                    </div>
+                    <div class="pipeline-scenarios pipeline-scenarios-inline" role="list">
+                      <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="api_full">
+                        <span class="pipeline-scenario-inline-icon" aria-hidden="true">☁️</span>
+                        <span class="pipeline-scenario-inline-copy">
+                          <strong data-i18n="settings.pipeline.scenario.api.title">Cloud</strong>
+                          <small data-i18n="settings.pipeline.scenario.api.inline">API speech + text</small>
+                        </span>
+                      </button>
+                      <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="mixed">
+                        <span class="pipeline-scenario-inline-icon" aria-hidden="true">🔀</span>
+                        <span class="pipeline-scenario-inline-copy">
+                          <strong data-i18n="settings.pipeline.scenario.mixed.title">Hybrid</strong>
+                          <small data-i18n="settings.pipeline.scenario.mixed.inline">Local speech + cloud text</small>
+                        </span>
+                      </button>
+                      <button type="button" class="pipeline-scenario pipeline-scenario-inline" data-scenario="all_local">
+                        <span class="pipeline-scenario-inline-icon" aria-hidden="true">🖥️</span>
+                        <span class="pipeline-scenario-inline-copy">
+                          <strong data-i18n="settings.pipeline.scenario.local.title">Local</strong>
+                          <small data-i18n="settings.pipeline.scenario.local.inline">Local speech + local text</small>
+                        </span>
+                      </button>
+                    </div>
+                    <p class="pipeline-inline-next" data-pipeline-next-action></p>
+                  </section>
+                </details>
               </form>
               <section id="provider-transcription-card" class="settings-card">
                 <h2 data-i18n="settings.transcription.title">Transcription</h2>
@@ -389,6 +405,8 @@
                     <small class="field-hint" data-i18n="settings.transcription.auto_select_hint">Downloaded models are selected automatically for transcription.</small>
                   </div>
                 </div>
+
+                <div id="transcription-status" class="section-status" role="status" aria-live="polite" data-tone="neutral"></div>
 
                 <div class="settings-actions settings-actions-spacious">
                   <button type="button" id="save-transcription-btn" class="settings-btn-primary" data-i18n="settings.action.save">Save</button>
@@ -498,6 +516,8 @@
                   </select>
                 </div>
               </div>
+
+              <div id="prompts-status" class="section-status" role="status" aria-live="polite" data-tone="neutral"></div>
 
               <div class="settings-actions">
                 <button type="button" id="reset-prompt-btn" class="settings-btn-secondary" data-i18n="settings.action.reset_defaults">Reset defaults</button>
