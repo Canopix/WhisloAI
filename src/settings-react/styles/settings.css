@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* Design tokens mirrored from the original public/styles.css :root,
+   exposed as CSS variables AND as Tailwind theme tokens via @theme. */
+@theme {
+  --color-bg: #f4f5f0;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f8fbfa;
+  --color-surface-elevated: rgba(255, 255, 255, 0.94);
+  --color-ink: #1f2a37;
+  --color-ink-muted: #586173;
+  --color-border-default: #dbe2ea;
+  --color-border-soft: #c9dcd5;
+
+  --color-accent: #0f766e;
+  --color-accent-strong: #0c645e;
+  --color-accent-soft: #ecfbf6;
+  --color-accent-contrast: #ffffff;
+
+  --color-state-loading-fg: #1e40af;
+  --color-state-loading-bg: #eef4ff;
+  --color-state-loading-border: #bfd3ef;
+  --color-state-success-fg: #166534;
+  --color-state-success-bg: #eaf8f1;
+  --color-state-success-border: #b9e3cf;
+  --color-state-error-fg: #991b1b;
+  --color-state-error-bg: #fff2f2;
+  --color-state-error-border: #f2c2c2;
+
+  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", "ui-monospace", monospace;
+
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-medium: 220ms;
+}
+
+:root {
+  --bg: #f4f5f0;
+  --surface: #ffffff;
+  --surface-soft: #f8fbfa;
+  --surface-elevated: rgba(255, 255, 255, 0.94);
+  --ink: #1f2a37;
+  --ink-muted: #586173;
+  --border: #dbe2ea;
+  --border-soft: #c9dcd5;
+  --accent: #0f766e;
+  --accent-strong: #0c645e;
+  --accent-soft: #ecfbf6;
+  --accent-contrast: #ffffff;
+  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.22);
+  --state-loading-fg: #1e40af;
+  --state-loading-bg: #eef4ff;
+  --state-loading-border: #bfd3ef;
+  --state-success-fg: #166534;
+  --state-success-bg: #eaf8f1;
+  --state-success-border: #b9e3cf;
+  --state-error-fg: #991b1b;
+  --state-error-bg: #fff2f2;
+  --state-error-border: #f2c2c2;
+  --easing-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-medium: 220ms;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body.settings-body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+*:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 8px;
+}

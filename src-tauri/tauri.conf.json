@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:4173",
-    "beforeDevCommand": "npm run build && python3 -m http.server 4173 -d dist",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "vite",
+    "beforeBuildCommand": "vite build"
   },
   "app": {
     "macOSPrivateApi": true,
