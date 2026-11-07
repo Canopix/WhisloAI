@@ -273,6 +273,14 @@ function setBusy(busy) {
 function setPreparingSpinner(visible) {
   if (dictateIconEl) dictateIconEl.hidden = visible;
   if (dictateSpinnerEl) dictateSpinnerEl.hidden = !visible;
+  
+  if (visible) {
+    dictateBtn.setAttribute("aria-busy", "true");
+    dictateBtn.setAttribute("aria-label", t("widget.dictate.transcribing.aria") || "Transcribiendo…");
+  } else if (!isRecording) {
+    dictateBtn.removeAttribute("aria-busy");
+    dictateBtn.setAttribute("aria-label", t("widget.dictate.start.aria"));
+  }
 }
 
 function setSelectionSpinner(visible) {
@@ -288,10 +296,14 @@ function setImproveSpinner(visible) {
 function updateDictateButton() {
   setDictateGlyph(isRecording ? "circle-stop" : "mic");
   dictateBtn.classList.toggle("is-recording", isRecording);
-  dictateBtn.setAttribute(
-    "aria-label",
-    isRecording ? t("widget.dictate.stop.aria") : t("widget.dictate.start.aria"),
-  );
+  
+  if (!dictateBtn.hasAttribute("aria-busy")) {
+    dictateBtn.setAttribute(
+      "aria-label",
+      isRecording ? t("widget.dictate.stop.aria") : t("widget.dictate.start.aria"),
+    );
+  }
+  
   dictateBtn.title = isRecording ? t("widget.dictate.stop.title") : t("widget.dictate.start.title");
   dictateBtn.disabled = isBusy && !isRecording;
   syncFastTooltips();
