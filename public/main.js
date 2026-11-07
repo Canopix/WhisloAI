@@ -25,6 +25,8 @@ const insertTranslateBtn = document.getElementById("insert-translate-btn");
 const copyTranslateBtn = document.getElementById("copy-translate-btn");
 const recordAudioBtn = document.getElementById("record-audio-btn");
 const stopAudioBtn = document.getElementById("stop-audio-btn");
+const recordBtnIcon = document.getElementById("record-btn-icon");
+const recordBtnSpinner = document.getElementById("record-btn-spinner");
 const recordingStateEl = document.getElementById("recording-state");
 const recordingVisualizerEl = document.getElementById("recording-visualizer");
 const recordingWaveformEl = document.getElementById("recording-waveform");
@@ -651,6 +653,19 @@ function setRecordingButtons(isRecording) {
   stopAudioBtn.disabled = !isRecording || isTranscribingAudio;
 }
 
+function setTranscribingState(transcribing) {
+  if (recordBtnIcon) recordBtnIcon.hidden = transcribing;
+  if (recordBtnSpinner) recordBtnSpinner.hidden = !transcribing;
+  
+  if (transcribing) {
+    recordAudioBtn.setAttribute("aria-busy", "true");
+    recordAudioBtn.setAttribute("aria-label", t("main.record.transcribing") || "Transcribiendo…");
+  } else {
+    recordAudioBtn.removeAttribute("aria-busy");
+    recordAudioBtn.setAttribute("aria-label", t("main.record.start") || "Grabar");
+  }
+}
+
 function pickRecorderMimeType() {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
     return null;
@@ -682,6 +697,7 @@ async function transcribeRecordedBlob(blob) {
 
   isTranscribingAudio = true;
   setRecordingButtons(false);
+  setTranscribingState(true);
   setRecordingStateKey("main.status.transcribing", "loading");
   setStatusKey("main.status.transcribing_audio", "loading");
 
@@ -700,6 +716,7 @@ async function transcribeRecordedBlob(blob) {
     setStatus(msg, "error");
   } finally {
     isTranscribingAudio = false;
+    setTranscribingState(false);
     setRecordingButtons(false);
   }
 }
