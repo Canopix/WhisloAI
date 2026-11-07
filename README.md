@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./src/Banner.png" alt="WhisloAI banner" width="100%" />
+  <img src="./public/Banner.png" alt="WhisloAI banner" width="100%" />
   <h1>WhisloAI</h1>
   <p>Desktop AI assistant for fast translation and dictation from any app.</p>
 </div>

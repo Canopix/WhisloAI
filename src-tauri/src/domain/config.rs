@@ -215,6 +215,7 @@ pub(crate) struct WhisperModelItem {
 #[derive(Debug, Clone)]
 pub(crate) struct InputFocusTarget {
     pub(crate) bundle_id: String,
+    pub(crate) pid: Option<i32>,
     pub(crate) x: i32,
     pub(crate) y: i32,
     pub(crate) captured_at_ms: u128,

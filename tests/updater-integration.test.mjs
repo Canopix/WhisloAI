@@ -45,17 +45,25 @@ test("tauri capabilities allow updater commands", () => {
 });
 
 test("rust app wires updater plugin, startup auto-check and tray menu action", () => {
-  const lib = read("src-tauri/src/lib.rs");
+  const appMod = read("src-tauri/src/app/mod.rs");
   expectContainsAll(
-    lib,
+    appMod,
+    [
+      '.plugin(tauri_plugin_updater::Builder::new().build())',
+      'start_background_update_check(app.handle().clone(), UpdateCheckTrigger::Startup);',
+    ],
+    "src-tauri/src/app/mod.rs",
+  );
+  
+  const tray = read("src-tauri/src/overlay/tray.rs");
+  expectContainsAll(
+    tray,
     [
       'const TRAY_MENU_CHECK_UPDATES: &str = "tray-check-updates";',
       '.text(TRAY_MENU_CHECK_UPDATES, "Check for updates")',
-      '.plugin(tauri_plugin_updater::Builder::new().build())',
-      'start_background_update_check(app.handle().clone(), UpdateCheckTrigger::Startup);',
       'start_background_update_check(app.clone(), UpdateCheckTrigger::TrayMenu);',
     ],
-    "src-tauri/src/lib.rs",
+    "src-tauri/src/overlay/tray.rs",
   );
 });
 
