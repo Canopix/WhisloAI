@@ -122,6 +122,7 @@ pub(crate) fn run() {
             commands::improve_text,
             commands::translate_text,
             commands::consume_pending_quick_action,
+            commands::capture_input_focus_target,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

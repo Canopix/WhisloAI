@@ -47,6 +47,7 @@ pub(crate) fn ensure_anchor_window(app: &tauri::AppHandle) -> Result<(), String>
         .accept_first_mouse(true)
         .skip_taskbar(true)
         .visible(false)
+        .focusable(false)
         .build()
         .map_err(|e| format!("Could not create anchor window: {e}"))?;
 
@@ -71,6 +72,7 @@ pub(crate) fn ensure_quick_window(app: &tauri::AppHandle) -> Result<(), String> 
         .accept_first_mouse(true)
         .skip_taskbar(true)
         .visible(false)
+        .focusable(false)
         .build()
         .map_err(|e| format!("Could not create quick window: {e}"))?;
 
@@ -435,14 +437,8 @@ pub(crate) fn open_quick_window_with_action(
             show_started.elapsed().as_millis(),
         ));
 
-        let focus_started = Instant::now();
-        if let Err(error) = window.set_focus() {
-            log::warn!("Could not focus quick window: {error}");
-        }
-        phases.push((
-            "focus_window".to_string(),
-            focus_started.elapsed().as_millis(),
-        ));
+        // Focus not needed - window is non-activating (focusable=false)
+        // This prevents stealing focus from the target app
 
         if let Some(value) = action.as_deref() {
             let emit_started = Instant::now();

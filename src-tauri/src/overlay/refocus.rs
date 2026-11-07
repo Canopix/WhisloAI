@@ -18,7 +18,7 @@ use crate::{
     focused_text_anchor_snapshot, open_quick_window_with_action, point_maps_to_any_monitor,
 };
 
-pub(crate) const INPUT_TARGET_TTL_MS: u128 = 90_000;
+pub(crate) const INPUT_TARGET_TTL_MS: u128 = 20_000;
 const REFOCUS_CLICK_STABILIZE_MS: u64 = 45;
 const REFOCUS_POST_RESTORE_MS: u64 = 35;
 
@@ -420,8 +420,9 @@ pub(crate) fn log_external_restore_trace(context: &str, attempt: RestoreExternal
 
 pub(crate) fn restore_last_external_app(app: &tauri::AppHandle) -> RestoreExternalAppAttempt {
     let now = now_millis();
-    let target = last_external_app_target(app);
-    let (reason, target_age_ms) = external_target_restore_reason(target.as_ref(), now);
+    let target_bundle = last_external_app_target(app);
+    let target_focus = last_input_focus_target(app);
+    let (reason, target_age_ms) = external_target_restore_reason(target_bundle.as_ref(), now);
 
     if reason != "ready" {
         if should_clear_external_cache_on_restore_reason(reason) {
@@ -436,7 +437,7 @@ pub(crate) fn restore_last_external_app(app: &tauri::AppHandle) -> RestoreExtern
         };
     }
 
-    let Some(target) = target else {
+    let Some(target) = target_bundle else {
         return RestoreExternalAppAttempt {
             attempted: false,
             ok: false,
@@ -445,7 +446,49 @@ pub(crate) fn restore_last_external_app(app: &tauri::AppHandle) -> RestoreExtern
         };
     };
 
-    let bundle_id = target.bundle_id;
+    let bundle_id = target.bundle_id.clone();
+    
+    // Try to activate using PID with polling if available
+    if let Some(focus_target) = target_focus {
+        if let Some(pid) = focus_target.pid {
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(error) = crate::platform::macos::activate_and_wait_for_frontmost(
+                    pid,
+                    &bundle_id,
+                    500,
+                ) {
+                    let normalized_reason = if should_clear_external_cache_on_restore_error(&error) {
+                        "not_running"
+                    } else {
+                        "restore_error"
+                    };
+                    if should_clear_external_cache_on_restore_reason(normalized_reason) {
+                        clear_last_external_app_bundle(app);
+                        clear_last_input_focus_target(app);
+                    }
+                    if !cfg!(debug_assertions) {
+                        log::warn!("Could not restore focus to app PID {pid} '{bundle_id}': {error}");
+                    }
+                    return RestoreExternalAppAttempt {
+                        attempted: true,
+                        ok: false,
+                        target_age_ms,
+                        reason: normalized_reason,
+                    };
+                }
+                
+                return RestoreExternalAppAttempt {
+                    attempted: true,
+                    ok: true,
+                    target_age_ms,
+                    reason: "ok",
+                };
+            }
+        }
+    }
+
+    // Fallback to bundle ID activation
     if let Err(error) = activate_bundle_id(&bundle_id) {
         let normalized_reason = if should_clear_external_cache_on_restore_error(&error) {
             "not_running"
@@ -477,7 +520,9 @@ pub(crate) fn restore_last_external_app(app: &tauri::AppHandle) -> RestoreExtern
 }
 
 pub(crate) fn refresh_last_input_focus_target_from_snapshot(app: &tauri::AppHandle) {
-    let Some(snapshot) = focused_text_anchor_snapshot(app) else {
+    let probe = crate::focused_text_anchor_probe(app);
+    
+    let Some(snapshot) = probe.snapshot else {
         return;
     };
 
@@ -492,6 +537,7 @@ pub(crate) fn refresh_last_input_focus_target_from_snapshot(app: &tauri::AppHand
             app,
             InputFocusTarget {
                 bundle_id: bundle_id.to_string(),
+                pid: probe.pid,
                 x: focus_x.max(1),
                 y: focus_y.max(1),
                 captured_at_ms: now_millis(),

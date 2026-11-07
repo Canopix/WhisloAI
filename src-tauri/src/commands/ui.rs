@@ -205,3 +205,9 @@ pub(crate) fn consume_pending_quick_action(
     let mut pending = state.0.lock().ok()?;
     pending.take()
 }
+
+#[tauri::command]
+pub(crate) fn capture_input_focus_target(app: tauri::AppHandle) -> Result<(), String> {
+    refresh_last_input_focus_target_from_snapshot(&app);
+    Ok(())
+}

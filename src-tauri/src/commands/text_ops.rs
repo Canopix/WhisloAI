@@ -205,13 +205,24 @@ pub(crate) fn auto_insert_text(
                     .to_string()
             },
         },
-        Err(error) => InsertTextResult {
-            copied: true,
-            pasted: false,
-            message: {
-                paste_error_message = Some(error.clone());
-                format!("Automatic paste failed: {error}")
-            },
+        Err(error) => {
+            paste_error_message = Some(error.clone());
+            let user_message = "Text is on your clipboard - paste it manually (Cmd+V)".to_string();
+            
+            // Emit event for UI toast notification
+            let _ = app.emit(
+                "paste-failed",
+                serde_json::json!({
+                    "message": user_message,
+                    "technical_error": error,
+                }),
+            );
+            
+            InsertTextResult {
+                copied: true,
+                pasted: false,
+                message: user_message,
+            }
         },
     };
 

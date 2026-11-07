@@ -145,6 +145,7 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                             &app,
                             InputFocusTarget {
                                 bundle_id: bundle_id.to_string(),
+                                pid: probe.pid,
                                 x: focus_x.max(1),
                                 y: focus_y.max(1),
                                 captured_at_ms: now_ms,
