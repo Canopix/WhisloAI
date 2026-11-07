@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::config::{non_empty_trimmed, AudioTranscriptionResponse, ProviderConfig};
+use super::http_client::{create_http_client, send_with_retry, RetryConfig};
 use super::providers::{
     local_prefers_openai_chat_endpoint, normalize_provider_base_url, normalize_provider_type,
     provider_endpoint, with_optional_bearer_auth,
@@ -144,10 +145,9 @@ pub(crate) async fn run_openai_chat_completion(
     };
 
     let endpoint = provider_endpoint(base_url, "chat/completions");
-    let client = reqwest::Client::new();
-    let response = with_optional_bearer_auth(client.post(endpoint), api_key)
-        .json(&request)
-        .send()
+    let client = create_http_client().map_err(|e| format!("HTTP client creation failed: {e}"))?;
+    let builder = with_optional_bearer_auth(client.post(endpoint), api_key).json(&request);
+    let response = send_with_retry(builder, RetryConfig::default())
         .await
         .map_err(|e| format!("Provider request failed: {e}"))?;
 
@@ -236,10 +236,10 @@ pub(crate) async fn run_local_rest_chat(
     );
     body.insert("temperature".to_string(), serde_json::Value::from(0.2_f64));
 
-    let client = reqwest::Client::new();
-    let response = with_optional_bearer_auth(client.post(endpoint), api_key)
-        .json(&serde_json::Value::Object(body))
-        .send()
+    let client = create_http_client().map_err(|e| format!("HTTP client creation failed: {e}"))?;
+    let builder = with_optional_bearer_auth(client.post(endpoint), api_key)
+        .json(&serde_json::Value::Object(body));
+    let response = send_with_retry(builder, RetryConfig::default())
         .await
         .map_err(|e| format!("/chat request failed: {e}"))?;
 

@@ -123,6 +123,7 @@ pub(crate) fn run() {
             commands::translate_text,
             commands::consume_pending_quick_action,
             commands::capture_input_focus_target,
+            commands::emit_recording_limit_reached,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -282,6 +282,26 @@ pub(crate) fn escape_applescript_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn run_applescript(script: &str) -> Result<String, String> {
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("Could not run AppleScript: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "AppleScript failed with non-zero exit code".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 pub(crate) fn external_target_restore_reason(
     target: Option<&ExternalAppTarget>,
     now_ms: u128,
@@ -329,17 +349,7 @@ end try
 "#
     );
 
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .map_err(|e| format!("Could not reactivate target app: {e}"))?;
-
-    if !output.status.success() {
-        return Err("Could not reactivate target app.".to_string());
-    }
-
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let raw = run_applescript(&script)?;
     if let Some(message) = raw.strip_prefix("ERR:") {
         return Err(message.trim().to_string());
     }
@@ -369,15 +379,7 @@ on error
 end try
 "#;
 
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let raw = run_applescript(script).ok()?;
     if raw.is_empty() || is_internal_app_bundle_id(&raw) {
         return None;
     }

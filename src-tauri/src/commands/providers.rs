@@ -125,10 +125,32 @@ pub(crate) fn save_provider(
         .find(|item| item.id == provider_id)
     {
         if let Some(secret) = incoming_api_key.as_deref() {
-            saved_provider.api_key_fallback_b64 = encode_api_key_fallback(secret);
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = crate::domain::providers::write_keyring_secret(&saved_provider.id, secret) {
+                    log::warn!("Could not store API key in keychain, using fallback: {e}");
+                    saved_provider.api_key_fallback_b64 = encode_api_key_fallback(secret);
+                } else {
+                    saved_provider.api_key_fallback_b64 = None;
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                saved_provider.api_key_fallback_b64 = encode_api_key_fallback(secret);
+            }
         } else if let Some(existing_secret) = provider_api_key_from_config(saved_provider) {
             if saved_provider.api_key_fallback_b64.is_none() {
-                saved_provider.api_key_fallback_b64 = encode_api_key_fallback(&existing_secret);
+                #[cfg(target_os = "macos")]
+                {
+                    if let Err(e) = crate::domain::providers::write_keyring_secret(&saved_provider.id, &existing_secret) {
+                        log::warn!("Could not store existing API key in keychain, using fallback: {e}");
+                        saved_provider.api_key_fallback_b64 = encode_api_key_fallback(&existing_secret);
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    saved_provider.api_key_fallback_b64 = encode_api_key_fallback(&existing_secret);
+                }
             }
         } else if provider_requires_api_key(&saved_provider.provider_type) {
             return Err("API key is required for this provider. Add it before saving.".to_string());
@@ -189,8 +211,9 @@ pub(crate) fn delete_provider(app: tauri::AppHandle, provider_id: String) -> Res
         }
     }
 
-    if let Ok(entry) = keyring_entry(clean_id) {
-        let _ = entry.delete_credential();
+    #[cfg(target_os = "macos")]
+    {
+        let _ = crate::domain::providers::delete_keyring_secret(clean_id);
     }
 
     save_config(&app, &config)
@@ -218,11 +241,15 @@ pub(crate) async fn test_provider_connection(
     }
     let endpoint = provider_endpoint(&base_url, "models");
 
-    let client = reqwest::Client::new();
-    let response = with_optional_bearer_auth(client.get(endpoint), api_key.as_deref())
-        .send()
-        .await
-        .map_err(|e| format!("Provider connection failed: {e}"))?;
+    let client = crate::domain::http_client::create_http_client()
+        .map_err(|e| format!("HTTP client creation failed: {e}"))?;
+    let builder = with_optional_bearer_auth(client.get(endpoint), api_key.as_deref());
+    let response = crate::domain::http_client::send_with_retry(
+        builder,
+        crate::domain::http_client::RetryConfig::default(),
+    )
+    .await
+    .map_err(|e| format!("Provider connection failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -270,11 +297,15 @@ pub(crate) async fn test_provider_connection_input(
     }
 
     let endpoint = provider_endpoint(&base_url, "models");
-    let client = reqwest::Client::new();
-    let response = with_optional_bearer_auth(client.get(endpoint), resolved_api_key.as_deref())
-        .send()
-        .await
-        .map_err(|e| format!("Provider connection failed: {e}"))?;
+    let client = crate::domain::http_client::create_http_client()
+        .map_err(|e| format!("HTTP client creation failed: {e}"))?;
+    let builder = with_optional_bearer_auth(client.get(endpoint), resolved_api_key.as_deref());
+    let response = crate::domain::http_client::send_with_retry(
+        builder,
+        crate::domain::http_client::RetryConfig::default(),
+    )
+    .await
+    .map_err(|e| format!("Provider connection failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();

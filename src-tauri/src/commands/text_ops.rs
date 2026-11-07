@@ -1,4 +1,5 @@
 use base64::Engine as _;
+use crate::domain::http_client::{create_http_client, send_with_retry, RetryConfig};
 use crate::*;
 use std::thread;
 use std::time::Instant;
@@ -104,10 +105,14 @@ pub(crate) async fn transcribe_audio(
         form = form.text("language", iso639.to_string());
     }
 
-    let client = reqwest::Client::new();
-    let response = with_optional_bearer_auth(client.post(endpoint), api_key.as_deref())
-        .multipart(form)
-        .send()
+    let client = create_http_client().map_err(|e| {
+        let message = format!("HTTP client creation failed: {e}");
+        log::warn!("transcribe_audio failed: {message}");
+        message
+    })?;
+    let builder = with_optional_bearer_auth(client.post(endpoint), api_key.as_deref())
+        .multipart(form);
+    let response = send_with_retry(builder, RetryConfig::default())
         .await
         .map_err(|e| {
             let message = format!("Transcription request failed: {e}");

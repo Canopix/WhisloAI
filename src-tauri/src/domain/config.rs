@@ -558,6 +558,10 @@ pub(crate) fn load_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
             provider.provider_type = normalized_type;
             needs_save = true;
         }
+
+        if crate::domain::providers::migrate_provider_key_to_keychain(provider) {
+            needs_save = true;
+        }
     }
 
     if !config.providers.is_empty() && !config.providers.iter().any(|provider| provider.is_active) {

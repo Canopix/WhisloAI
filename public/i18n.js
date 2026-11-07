@@ -379,8 +379,13 @@
       "error.microphone": "Could not access the microphone. Check system permissions.",
       "error.transcription_empty": "We could not transcribe clearly. Try recording again.",
       "error.network": "Could not process text due to a connection issue.",
+      "error.network_timeout": "Request timed out. Check your connection and try again.",
+      "error.server_error": "Server error (5xx). The provider is temporarily unavailable.",
+      "error.connection_failed": "Connection failed. Check internet connection and provider URL.",
+      "error.provider_error": "Provider error: {message}",
       "error.auto_paste": "Automatic paste failed. Text was copied.",
       "error.no_selected_text": "No selected text detected. Select text and try again.",
+      "error.recording_limit": "Recording stopped: 5-minute limit reached.",
     },
     es: {
       "app.name": "WhisloAI",
@@ -757,8 +762,13 @@
       "error.microphone": "No se pudo acceder al micrófono. Revisá permisos del sistema.",
       "error.transcription_empty": "No pudimos transcribir claramente. Probá grabar de nuevo.",
       "error.network": "No se pudo procesar el texto por un problema de conexión.",
+      "error.network_timeout": "Tiempo de espera agotado. Revisá tu conexión e intentá de nuevo.",
+      "error.server_error": "Error del servidor (5xx). El proveedor no está disponible temporalmente.",
+      "error.connection_failed": "Falló la conexión. Verificá tu conexión a internet y la URL del proveedor.",
+      "error.provider_error": "Error del proveedor: {message}",
       "error.auto_paste": "No se pudo pegar automáticamente. El texto quedó copiado.",
       "error.no_selected_text": "No se detectó texto seleccionado. Seleccioná y probá de nuevo.",
+      "error.recording_limit": "Grabación detenida: límite de 5 minutos alcanzado.",
     },
   };
 
