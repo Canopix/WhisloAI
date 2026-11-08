@@ -9,10 +9,12 @@ use crate::domain::geometry::{physical_to_logical, point_in_rect};
 use crate::overlay::refocus::now_millis;
 use crate::overlay::windows::monitor_scale_factor_for_logical_point;
 
-pub(crate) const ANCHOR_MONITOR_ACTIVE_POLL_MS: u64 = 180;
+pub(crate) const ANCHOR_MONITOR_ACTIVE_POLL_MS: u64 = 200;
+pub(crate) const ANCHOR_MONITOR_IDLE_POLL_MS: u64 = 500;
 pub(crate) const ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS: u64 = 700;
 pub(crate) const ANCHOR_HIDE_DEBOUNCE_MS: u128 = 420;
 pub(crate) const ANCHOR_LAST_VALID_SNAPSHOT_TTL_MS: u128 = 1_200;
+pub(crate) const ANCHOR_IDLE_THRESHOLD_MS: u128 = 2_000;
 
 #[cfg(target_os = "macos")]
 const AX_NATIVE_FALLBACK_FAILURE_THRESHOLD: u32 = 1;
@@ -25,9 +27,15 @@ static AX_NATIVE_FALLBACK_STATE: OnceLock<Mutex<HybridFallbackState>> = OnceLock
 pub(crate) fn anchor_monitor_poll_interval_ms(
     floating_mode: bool,
     contextual_tracking_supported: bool,
+    last_change_ms_ago: Option<u128>,
 ) -> u64 {
     if !floating_mode && !contextual_tracking_supported {
         return ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS;
+    }
+    if let Some(idle_time) = last_change_ms_ago {
+        if idle_time > ANCHOR_IDLE_THRESHOLD_MS {
+            return ANCHOR_MONITOR_IDLE_POLL_MS;
+        }
     }
     ANCHOR_MONITOR_ACTIVE_POLL_MS
 }
@@ -36,17 +44,17 @@ pub(crate) fn anchor_monitor_poll_interval_ms(
 mod tests {
     use super::{
         anchor_monitor_poll_interval_ms, ANCHOR_MONITOR_ACTIVE_POLL_MS,
-        ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS,
+        ANCHOR_MONITOR_IDLE_POLL_MS, ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS,
     };
 
     #[test]
     fn anchor_monitor_poll_interval_stays_fast_for_active_tracking() {
         assert_eq!(
-            anchor_monitor_poll_interval_ms(true, false),
+            anchor_monitor_poll_interval_ms(true, false, Some(100)),
             ANCHOR_MONITOR_ACTIVE_POLL_MS
         );
         assert_eq!(
-            anchor_monitor_poll_interval_ms(false, true),
+            anchor_monitor_poll_interval_ms(false, true, Some(100)),
             ANCHOR_MONITOR_ACTIVE_POLL_MS
         );
     }
@@ -54,8 +62,20 @@ mod tests {
     #[test]
     fn anchor_monitor_poll_interval_slows_down_when_contextual_tracking_is_unavailable() {
         assert_eq!(
-            anchor_monitor_poll_interval_ms(false, false),
+            anchor_monitor_poll_interval_ms(false, false, Some(100)),
             ANCHOR_MONITOR_IDLE_UNSUPPORTED_POLL_MS
+        );
+    }
+
+    #[test]
+    fn anchor_monitor_poll_interval_backs_off_when_idle() {
+        assert_eq!(
+            anchor_monitor_poll_interval_ms(true, true, Some(3000)),
+            ANCHOR_MONITOR_IDLE_POLL_MS
+        );
+        assert_eq!(
+            anchor_monitor_poll_interval_ms(true, true, None),
+            ANCHOR_MONITOR_ACTIVE_POLL_MS
         );
     }
 }
@@ -392,8 +412,8 @@ fn macos_probe_from_logical_text_rect(
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn focused_text_anchor_probe_apple_script(app: &tauri::AppHandle) -> FocusedAnchorProbe {
-    let script = r#"
+fn generate_anchor_probe_applescript() -> String {
+    r#"
 set textRoles to {"AXTextField", "AXTextArea", "AXTextView", "AXComboBox", "AXSearchField"}
 set skipPrefix to "SKIP" & tab
 try
@@ -466,7 +486,12 @@ try
 on error errMsg
   return "ERROR" & tab & errMsg
 end try
-"#;
+"#.to_string()
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn focused_text_anchor_probe_apple_script(app: &tauri::AppHandle) -> FocusedAnchorProbe {
+    let script = generate_anchor_probe_applescript();
 
     let output = Command::new("osascript").arg("-e").arg(script).output();
     let output = match output {

@@ -48,11 +48,13 @@ pub(crate) fn local_prefers_openai_chat_endpoint(base_url: &str) -> bool {
         .ends_with("/v1")
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn keyring_entry(provider_id: &str) -> Result<Entry, String> {
     Entry::new(KEYRING_SERVICE, provider_id)
         .map_err(|e| format!("Could not create keyring entry for provider {provider_id}: {e}"))
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn read_keyring_secret(provider_id: &str) -> Option<String> {
     let entry = keyring_entry(provider_id).ok()?;
     let secret = entry.get_password().ok()?;
@@ -62,6 +64,37 @@ pub(crate) fn read_keyring_secret(provider_id: &str) -> Option<String> {
     } else {
         Some(clean)
     }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn write_keyring_secret(provider_id: &str, secret: &str) -> Result<(), String> {
+    let entry = keyring_entry(provider_id)?;
+    entry
+        .set_password(secret)
+        .map_err(|e| format!("Could not store API key in keychain for provider {provider_id}: {e}"))
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn delete_keyring_secret(provider_id: &str) -> Result<(), String> {
+    let entry = keyring_entry(provider_id)?;
+    entry
+        .delete_credential()
+        .map_err(|e| format!("Could not delete API key from keychain for provider {provider_id}: {e}"))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn read_keyring_secret(_provider_id: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn write_keyring_secret(_provider_id: &str, _secret: &str) -> Result<(), String> {
+    Err("Keychain storage not available on this platform".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn delete_keyring_secret(_provider_id: &str) -> Result<(), String> {
+    Ok(())
 }
 
 pub(crate) fn encode_api_key_fallback(secret: &str) -> Option<String> {
@@ -91,8 +124,27 @@ pub(crate) fn decode_api_key_fallback(encoded: Option<&String>) -> Option<String
 }
 
 pub(crate) fn provider_api_key_from_config(provider: &ProviderConfig) -> Option<String> {
-    decode_api_key_fallback(provider.api_key_fallback_b64.as_ref())
-        .or_else(|| read_keyring_secret(&provider.id))
+    read_keyring_secret(&provider.id)
+        .or_else(|| decode_api_key_fallback(provider.api_key_fallback_b64.as_ref()))
+}
+
+pub(crate) fn migrate_provider_key_to_keychain(provider: &mut ProviderConfig) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(fallback_key) = decode_api_key_fallback(provider.api_key_fallback_b64.as_ref()) {
+            if read_keyring_secret(&provider.id).is_none() {
+                if let Ok(()) = write_keyring_secret(&provider.id, &fallback_key) {
+                    provider.api_key_fallback_b64 = None;
+                    return true;
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = provider;
+    }
+    false
 }
 
 pub(crate) fn provider_dedupe_signature(provider: &ProviderConfig) -> String {

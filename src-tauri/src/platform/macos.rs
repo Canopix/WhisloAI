@@ -154,11 +154,42 @@ end try
 
         std::thread::sleep(std::time::Duration::from_millis(click_stabilize_ms));
 
+        let _ = restore_ax_focused_at_point(x, y);
+
         let _ = enigo.move_mouse(original_cursor.0, original_cursor.1, Coordinate::Abs);
         std::thread::sleep(std::time::Duration::from_millis(post_restore_ms));
 
         Ok(())
     }
+}
+
+fn restore_ax_focused_at_point(x: i32, y: i32) -> Result<(), String> {
+    let script = format!(
+        r#"
+try
+  tell application "System Events"
+    set frontProcess to first application process whose frontmost is true
+    set elementAtPoint to UI element at {{{}, {}}} of frontProcess
+    if exists elementAtPoint then
+      try
+        set focused of elementAtPoint to true
+      end try
+    end if
+  end tell
+  return "OK"
+on error
+  return "OK"
+end try
+"#,
+        x, y
+    );
+
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output();
+
+    Ok(())
 }
 
 /// Activate app by PID using NSRunningApplication and poll until it's frontmost

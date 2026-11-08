@@ -13,6 +13,44 @@ const setLanguagePreference = (preference) => {
   }
 };
 
+function showErrorToast(message) {
+  const existingToast = document.querySelector(".error-toast");
+  if (existingToast) {
+    existingToast.remove();
+  }
+
+  const toast = document.createElement("div");
+  toast.className = "error-toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("show");
+  }, 10);
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+function classifyError(errorMessage) {
+  const msg = String(errorMessage || "").toLowerCase();
+  if (msg.includes("timeout") || msg.includes("timed out")) {
+    return "error.network_timeout";
+  }
+  if (msg.includes("connect") || msg.includes("connection")) {
+    return "error.connection_failed";
+  }
+  if (msg.includes("5")) {
+    return "error.server_error";
+  }
+  if (msg.includes("api key") || msg.includes("unauthorized") || msg.includes("401")) {
+    return "error.api_key";
+  }
+  return "error.provider_error";
+}
+
 const quickShell = document.getElementById("quick-shell");
 const quickToolbar = document.querySelector(".quick-toolbar");
 const translateSelectionBtn = document.getElementById("quick-translate-selection-btn");
@@ -46,11 +84,15 @@ let quickModeLoadedAt = 0;
 let recordingAborted = false;
 let dictationStartNonce = 0;
 let uiLanguagePreference = "system";
+let recordingTimeoutId = null;
+let recordingWarningTimeoutId = null;
 
 const QUICK_WAVE_BAR_COUNT = 20;
 const SUPPORTED_MODES = ["simple", "professional", "friendly", "casual", "formal"];
 const QUICK_MODE_CACHE_MS = 30_000;
 const DICTATION_CHUNK_MS = 250;
+const MAX_RECORDING_MS = 5 * 60 * 1000;
+const RECORDING_WARNING_MS = 4 * 60 * 1000 + 30 * 1000;
 
 function nowMs() {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
@@ -332,6 +374,18 @@ function stopAndReleaseStream() {
   }
   activeStream = null;
   stopRecordingVisualizer();
+  clearRecordingTimers();
+}
+
+function clearRecordingTimers() {
+  if (recordingTimeoutId) {
+    clearTimeout(recordingTimeoutId);
+    recordingTimeoutId = null;
+  }
+  if (recordingWarningTimeoutId) {
+    clearTimeout(recordingWarningTimeoutId);
+    recordingWarningTimeoutId = null;
+  }
 }
 
 async function insertResultText(output, options = {}) {
@@ -566,6 +620,23 @@ async function startDictation() {
     setBusy(false);
     setPreparingSpinner(false);
     updateDictateButton();
+    
+    clearRecordingTimers();
+    recordingWarningTimeoutId = setTimeout(() => {
+      if (isRecording) {
+        showErrorToast(t("error.recording_limit").replace("stopped", "will stop soon"));
+      }
+    }, RECORDING_WARNING_MS);
+    
+    recordingTimeoutId = setTimeout(() => {
+      if (isRecording) {
+        try {
+          invoke("emit_recording_limit_reached").catch(() => {});
+        } catch (_) {}
+        stopDictation();
+      }
+    }, MAX_RECORDING_MS);
+    
     requestAnimationFrame(() => {
       if (activeStream && isRecording) {
         startRecordingVisualizer(activeStream);
@@ -590,6 +661,7 @@ async function startDictation() {
 
 function stopDictation() {
   dictationStartNonce += 1;
+  clearRecordingTimers();
   if (!mediaRecorder || mediaRecorder.state !== "recording") {
     isRecording = false;
     updateDictateButton();
@@ -601,6 +673,7 @@ function stopDictation() {
 
 function abortDictation() {
   dictationStartNonce += 1;
+  clearRecordingTimers();
   recordingAborted = true;
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
@@ -750,6 +823,20 @@ async function bootstrap() {
     });
     await listen("quick-action", (event) => {
       runQuickAction(event?.payload?.action);
+    });
+    await listen("provider-error", (event) => {
+      const errorMsg = String(event?.payload?.message || "");
+      const errorKey = classifyError(errorMsg);
+      const localizedMsg = errorKey === "error.provider_error"
+        ? t(errorKey, { message: errorMsg })
+        : t(errorKey);
+      showErrorToast(localizedMsg);
+    });
+    await listen("recording-limit-reached", () => {
+      showErrorToast(t("error.recording_limit"));
+      if (isRecording) {
+        stopDictation();
+      }
     });
     const pending = await invoke("consume_pending_quick_action");
     runQuickAction(pending || "open-app");

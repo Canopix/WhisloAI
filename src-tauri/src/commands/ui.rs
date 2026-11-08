@@ -211,3 +211,9 @@ pub(crate) fn capture_input_focus_target(app: tauri::AppHandle) -> Result<(), St
     refresh_last_input_focus_target_from_snapshot(&app);
     Ok(())
 }
+
+#[tauri::command]
+pub(crate) fn emit_recording_limit_reached(app: tauri::AppHandle) -> Result<(), String> {
+    app.emit("recording-limit-reached", ())
+        .map_err(|e| format!("Could not emit recording limit event: {e}"))
+}

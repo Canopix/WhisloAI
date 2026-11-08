@@ -27,6 +27,7 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
         let mut last_contextual_reason: Option<String> = None;
         let mut hide_candidate_since_ms: Option<u128> = None;
         let mut last_valid_contextual_snapshot: Option<TimedContextualSnapshot> = None;
+        let mut last_change_at_ms: Option<u128> = None;
         let contextual_tracking_supported = contextual_anchor_tracking_supported();
 
         loop {
@@ -37,8 +38,9 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                 continue;
             };
             let floating_mode = is_anchor_floating_mode(&app);
+            let last_change_ms_ago = last_change_at_ms.map(|t| now_millis().saturating_sub(t));
             let poll_interval_ms =
-                anchor_monitor_poll_interval_ms(floating_mode, contextual_tracking_supported);
+                anchor_monitor_poll_interval_ms(floating_mode, contextual_tracking_supported, last_change_ms_ago);
 
             if SETTINGS_WINDOW_OPEN.load(Ordering::SeqCst) {
                 let _ = anchor.hide();
@@ -136,6 +138,9 @@ pub(crate) fn start_anchor_monitor_once(app: tauri::AppHandle) {
                     snapshot: entry.clone(),
                     captured_at_ms: now_ms,
                 });
+                if last != Some(entry.position) {
+                    last_change_at_ms = Some(now_ms);
+                }
                 save_last_anchor_position(&app, entry.position);
                 save_last_anchor_timestamp(&app, now_ms);
                 if let Some(bundle_id) = entry.bundle_id.as_deref() {
